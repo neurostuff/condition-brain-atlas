@@ -1,0 +1,446 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Condition Brain Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working atlas for finding hypotheses. Lists of candidates lead to one condition page, where an evidence grid drives a single large map. The map ramp's burnt orange is the only accent; slate marks "more in patients". */
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --ink: #1d2024; --muted: #5d646c; --line: #dcd9d2; --accent: #b4500f; --accent-soft: #f3e2d3; --bar: #c9662a; --bar2: #6b7f96; --bar3: #b9b4a8; --warn-bg: #fff4d6; --warn-ink: #5c4300; --good: #2f6b4f; --good-bg: #e2efe7;
+  --display: "Newsreader", Georgia, serif; --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #15171a; --panel: #1d2024; --ink: #e9e7e2; --muted: #a2a8af; --line: #33373d; --accent: #f0975a; --accent-soft: #3a2a1f; --bar: #e0823f; --bar2: #8ea3bb; --bar3: #5a5f66; --warn-bg: #3a3116; --warn-ink: #f2dc9a; --good: #8fd0ad; --good-bg: #1f3329; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #15171a; --panel: #1d2024; --ink: #e9e7e2; --muted: #a2a8af; --line: #33373d; --accent: #f0975a; --accent-soft: #3a2a1f; --bar: #e0823f; --bar2: #8ea3bb; --bar3: #5a5f66; --warn-bg: #3a3116; --warn-ink: #f2dc9a; --good: #8fd0ad; --good-bg: #1f3329; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 20px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+header.top .name { font-family: var(--display); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+nav a { color: var(--muted); text-decoration: none; padding: 4px 0; border-bottom: 2px solid transparent; font-weight: 500; }
+nav a.on { color: var(--ink); border-bottom-color: var(--accent); }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { background: var(--warn-bg); color: var(--warn-ink); border-radius: 6px; padding: 9px 12px; margin: 14px 0 0; font-size: 14px; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 32px; line-height: 1.15; margin: 26px 0 6px; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 21px; margin: 30px 0 8px; text-wrap: balance; }
+h3 { font-size: 15px; font-weight: 600; margin: 16px 0 2px; }
+p { margin: 0 0 10px; max-width: 68ch; }
+.sub { color: var(--muted); }
+.small { font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 14px; margin: 2px 0 6px; }
+.chips b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 14px 0 10px; }
+.controls input, .controls select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-width: 0; max-width: 100%; }
+.controls input { flex: 1 1 220px; }
+.controls label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; white-space: nowrap; }
+td { border-bottom: 1px solid var(--line); padding: 7px 10px 7px 0; vertical-align: top; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-size: 13px; }
+tr.row { cursor: pointer; }
+tr.row:hover td { background: var(--accent-soft); }
+td a.cname { color: var(--ink); text-decoration: none; font-weight: 500; }
+td a.cname:hover { color: var(--accent); }
+td .where { color: var(--muted); font-size: 13px; }
+.tag { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tag.good { background: var(--good-bg); color: var(--good); }
+.tag.weak { background: var(--warn-bg); color: var(--warn-ink); }
+.tag.less { background: var(--accent-soft); color: var(--accent); }
+.tag.more { background: color-mix(in srgb, var(--bar2) 22%, transparent); color: var(--ink); }
+.more-btn { font: inherit; font-weight: 600; color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; margin-top: 12px; cursor: pointer; }
+.routes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; margin-top: 8px; }
+.routes section { border-top: 2px solid var(--ink); padding-top: 10px; min-width: 0; }
+.routes h2 { margin: 0 0 4px; }
+.routes ol { list-style: none; margin: 10px 0 10px; padding: 0; display: grid; gap: 9px; }
+.routes li a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.routes li a:hover { color: var(--accent); }
+.routes li span { display: block; color: var(--muted); font-size: 13px; }
+.routes .all { font-weight: 600; text-decoration: none; }
+@media (max-width: 820px) { .routes { grid-template-columns: 1fr; gap: 22px 0; } }
+.trust { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 28px; margin: 8px 0 4px; }
+.trust div { min-width: 0; }
+.trust b { display: block; font-family: var(--mono); font-size: 20px; font-weight: 500; }
+.trust span { color: var(--muted); font-size: 13px; }
+@media (max-width: 640px) { .trust { grid-template-columns: 1fr; } }
+.grid td, .grid th { padding-right: 8px; }
+.cellbtn { font: inherit; font-family: var(--mono); font-size: 13px; width: 100%; min-width: 74px; text-align: right; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 4px 8px; cursor: pointer; position: relative; }
+.cellbtn i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-soft); border-radius: 4px; z-index: 0; }
+.cellbtn.m i { background: color-mix(in srgb, var(--bar2) 24%, transparent); }
+.cellbtn span { position: relative; z-index: 1; }
+.cellbtn.none { border: 1px dashed var(--line); color: var(--muted); font-family: var(--body); }
+.cellbtn:hover { border-color: var(--accent); }
+.cellbtn[aria-pressed="true"] { border: 2px solid var(--accent); padding: 3px 7px; }
+.viewer { margin: 6px 0 4px; }
+.vbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px; }
+.vbar label { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.vbar select { font: inherit; font-weight: 400; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; max-width: 100%; min-width: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 14px; color: var(--muted); background: var(--panel); border: 0; padding: 7px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { color: var(--ink); background: var(--accent-soft); font-weight: 600; }
+.vnote { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
+.vnote.inferred { color: var(--warn-ink); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; display: inline-block; }
+.views { display: grid; grid-template-columns: 1.15fr 0.95fr 0.95fr; gap: 10px; align-items: end; }
+.views figure { margin: 0; min-width: 0; }
+.views canvas { display: block; width: 100%; height: auto; }
+.views figcaption { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.scale i { display: inline-block; flex: 0 0 110px; height: 9px; border-radius: 2px; background: linear-gradient(90deg, #fec44f, #ec7014, #cc4c02, #8c2d04, #50140a); }
+.built { max-width: 760px; }
+.stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--line); margin: 6px 0; }
+.stack i { display: block; height: 100%; }
+.stack .s0, .sw.s0 { background: var(--bar); } .stack .s1, .sw.s1 { background: var(--bar2); } .stack .s2, .sw.s2 { background: var(--bar3); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.regions { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; max-width: 760px; }
+.regions li { display: grid; grid-template-columns: minmax(150px, 280px) 1fr 3.2em 6.5em; gap: 10px; align-items: center; font-size: 14px; }
+.regions .rbar { height: 9px; background: var(--line); border-radius: 2px; overflow: hidden; min-width: 0; }
+.regions .rbar i { display: block; height: 100%; background: var(--bar); }
+.regions .rv, .regions .rl { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+@media (max-width: 640px) { .views { grid-template-columns: 1fr 1fr; } .views figure:first-child { grid-column: 1 / -1; } .regions li { grid-template-columns: 1fr 3.2em 6.5em; } .regions .rbar { display: none; } }
+.near { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 0; margin: 0; list-style: none; }
+.near a { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; text-decoration: none; color: var(--ink); background: var(--panel); font-size: 14px; }
+.near a span { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-left: 6px; }
+.netcard { border-top: 1px solid var(--line); padding: 16px 0 6px; }
+.netcard h2 { margin-top: 0; }
+.back { display: inline-block; margin-top: 18px; text-decoration: none; }
+.empty { color: var(--muted); padding: 24px 0; }
+@media (max-width: 560px) { h1 { font-size: 26px; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <a class="name" href="#start">Condition Brain Atlas</a>
+    <nav id="nav">
+      <a href="#start" data-v="start">Start</a>
+      <a href="#conditions" data-v="conditions">Conditions</a>
+      <a href="#gaps" data-v="gaps">Untested predictions</a>
+      <a href="#departures" data-v="departures">Departures</a>
+      <a href="#pairs" data-v="pairs">Cross-class pairs</a>
+      <a href="#about" data-v="about">Method and limits</a>
+    </nav>
+  </header>
+  <p class="note" id="banner">Experimental. Every map is a prediction from published patient-versus-control coordinates, not a measurement. Use it to choose what to test, and check the track record shown beside each prediction.</p>
+  <main id="main"><p class="empty">Loading the atlas…</p></main>
+</div>
+
+<script>
+(function () {
+  var D = null, G = null, main = document.getElementById('main'), DIRS = ['less', 'more'];
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function lab(m) { return D.meta.labels[m] || cap(m); }
+  function sg(x, k) { return (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(k == null ? 3 : k); }
+  function strength(c) { var q = D.meta.strength_q; return c.strength < q[0] ? 'Little beyond its class' : c.strength < q[1] ? 'Some pattern beyond its class' : 'Distinct from its class'; }
+  function mdir(m, d) { return D.meta.flip.indexOf(m) >= 0 ? (d === 'less' ? 'more' : 'less') : d; }   // direction by meaning: more diffusivity is damage, like less of the rest
+  function dirTag(d) { return '<span class="tag ' + d + '">' + (d === 'less' ? 'Less in patients' : 'More in patients') + '</span>'; }
+  function cname(i) { return esc(cap(D.conditions[i].name)); }
+  function related(c, m, d) {   // contrasts of this condition in the same family of measures and the same direction by meaning
+    var fam = D.meta.family[m], md = mdir(m, d), n = 0;
+    Object.keys(c.measures).forEach(function (m2) { if (D.meta.family[m2] !== fam) return; DIRS.forEach(function (d2, k) { if (mdir(m2, d2) === md) n += c.measures[m2][k]; }); });
+    return n;
+  }
+  function track(m) { var t = (D.meta.tests.cell_by_measure || {})[m]; return t ? t[0] : null; }
+  function trackTag(m) { var t = track(m); return t == null ? '' : '<span class="tag ' + (t >= 0.03 ? 'good' : 'weak') + '" title="Gain per held-out peak when this measure was withheld for a condition and predicted from the rest">' + sg(t, 2) + '</span>'; }
+  function regionNames(m, cell) { var wm = D.meta.wm_measures.indexOf(m) >= 0 && D.meta.wm_names, nm = wm ? D.meta.wm_names : D.meta.gm_names; return cell.slice(3).map(function (k) { return nm[k]; }); }
+  function cellHash(i, j, d) { return '#c-' + i + '-m' + j + '-' + d; }
+
+  // ---- candidate lists, built once ----
+  var GAPS = null, DEPS = null;
+  function build() {
+    GAPS = []; DEPS = [];
+    D.conditions.forEach(function (c, i) {
+      D.meta.measures.forEach(function (m, j) { DIRS.forEach(function (d, k) {
+        var cell = c.cells[j][k];
+        if (cell[0] <= 3 && c.own[mdir(m, d)]) GAPS.push({i: i, j: j, d: d, n: cell[0], spec: cell[2], move: cell[1], rel: related(c, m, d) - cell[0], track: track(m), cell: cell});
+      }); });
+      Object.keys(c.transfer || {}).forEach(function (m) { var t = c.transfer[m]; if (t[1] >= 40) DEPS.push({i: i, m: m, j: D.meta.measures.indexOf(m), gain: t[0], peaks: t[1]}); });
+    });
+    DEPS.sort(function (a, b) { return a.gain - b.gain; });
+  }
+  function gapScore(g) { return g.spec * Math.min(1, g.rel / 10) * (g.track != null && g.track >= 0.03 ? 1 : 0.4); }
+
+  // ---- maps: P(v) = softmax(log window + Phi . sum of label coefficients), computed here from maps.txt ----
+  var VIEWS = [{a: 1, b: 2, cap: 'Side view, front to the right'}, {a: 0, b: 2, cap: 'Front view, left on the left'}, {a: 0, b: 1, cap: 'Top view, front at the top'}];
+  var LO = 0.35, RAMP = [[254, 196, 79], [236, 112, 20], [204, 76, 2], [140, 45, 4], [80, 20, 10]];
+  function loadMaps(buf) {
+    var L = D.meta.layout;
+    function arr(n, C) { var x = L[n]; return new C(buf, x[0], x[2].reduce(function (p, q) { return p * q; }, 1)); }
+    G = {ptr: arr('phi_ptr', Uint32Array), idx: arr('phi_idx', Uint16Array), val: arr('phi_val', Uint8Array), a: arr('a', Int8Array), as: arr('a_scale', Float32Array),
+         logw: arr('logw', Float32Array), ijk: arr('ijk', Uint8Array), gm: arr('gm', Uint8Array), wm: arr('wm', Uint8Array), V: L.gm[2][0], R: D.meta.bumps, shape: D.meta.grid.shape};
+  }
+  function field(ids) {      // log-intensity over voxels added by these labels
+    var R = G.R, V = G.V, co = new Float32Array(R), i, r, v, out = new Float32Array(V);
+    for (i = 0; i < ids.length; i++) { var o = ids[i] * R, s = G.as[ids[i]]; for (r = 0; r < R; r++) co[r] += s * G.a[o + r]; }
+    for (v = 0; v < V; v++) { var e = 0; for (var q = G.ptr[v]; q < G.ptr[v + 1]; q++) e += G.val[q] * co[G.idx[q]]; out[v] = e / 255; }
+    return out;
+  }
+  function variance(x) { var s = 0, s2 = 0, n = x.length; for (var v = 0; v < n; v++) { s += x[v]; s2 += x[v] * x[v]; } return s2 / n - (s / n) * (s / n); }
+  function prob(ids, j) {
+    var V = G.V, out = field(ids), mx = -1e30, v, tot = 0;
+    for (v = 0; v < V; v++) { out[v] += G.logw[j * V + v]; if (out[v] > mx) mx = out[v]; }
+    for (v = 0; v < V; v++) { out[v] = Math.exp(out[v] - mx); tot += out[v]; }
+    for (v = 0; v < V; v++) out[v] /= tot;
+    return out;
+  }
+  function drawView(cv, vals, mx, a, b) {
+    var W = G.shape[a], H = G.shape[b], img = new Float32Array(W * H), mask = new Uint8Array(W * H), v;
+    for (v = 0; v < G.V; v++) { var p = (H - 1 - G.ijk[3 * v + b]) * W + G.ijk[3 * v + a]; mask[p] = 1; if (vals[v] > img[p]) img[p] = vals[v]; }
+    var S = 8; cv.width = W * S; cv.height = H * S;
+    var small = document.createElement('canvas'); small.width = W; small.height = H;
+    var sc = small.getContext('2d'), id = sc.createImageData(W, H), d = id.data;
+    for (var q = 0; q < W * H; q++) {
+      if (!mask[q]) continue;
+      var x = img[q] / mx;
+      if (x >= LO) { var t = (x - LO) / (1 - LO) * (RAMP.length - 1), i0 = Math.min(Math.floor(t), RAMP.length - 2), f = t - i0;
+        for (var c = 0; c < 3; c++) d[4 * q + c] = RAMP[i0][c] * (1 - f) + RAMP[i0 + 1][c] * f; d[4 * q + 3] = 255; }
+      else { d[4 * q] = d[4 * q + 1] = d[4 * q + 2] = 128; d[4 * q + 3] = 60; }
+    }
+    sc.putImageData(id, 0, 0);
+    var ctx = cv.getContext('2d'); ctx.clearRect(0, 0, cv.width, cv.height); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(small, 0, 0, cv.width, cv.height);
+  }
+  function topRegions(p, base, j) {
+    var m = D.meta.measures[j], wmMeasure = D.meta.wm_measures.indexOf(m) >= 0, useWM = wmMeasure && D.meta.wm_names;
+    var lb = useWM ? G.wm : G.gm, names = useWM ? D.meta.wm_names : D.meta.gm_names, n = names.length, sum = new Float64Array(n), bs = new Float64Array(n), v;
+    for (v = 0; v < G.V; v++) { sum[lb[v]] += p[v]; bs[lb[v]] += base[v]; }
+    var out = [];
+    for (var i = 0; i < n; i++) { if (names[i] === 'Unlabeled' || names[i] === 'White matter, no tract label' || (!wmMeasure && names[i] === 'White matter')) continue; out.push({name: names[i], share: sum[i], extra: sum[i] - bs[i], lift: sum[i] / Math.max(bs[i], 1e-9)}); }
+    out.sort(function (x, y) { return y.extra - x.extra; });
+    return {list: out.filter(function (r) { return r.extra > 0; }).slice(0, 5), atlas: useWM ? D.meta.wm_atlas : 'gm'};
+  }
+  function viewerHTML(kind, i) { return '<div class="viewer" data-kind="' + kind + '" data-i="' + i + '"></div>'; }
+  var current = null;   // the condition page's viewer: {set(j, d), state}
+  function mountViewers(init) {
+    current = null;
+    Array.prototype.forEach.call(main.querySelectorAll('.viewer'), function (el) {
+      var kind = el.getAttribute('data-kind'), i = +el.getAttribute('data-i'), c = kind === 'c' ? D.conditions[i] : null, k = kind === 'k' ? D.classes[i] : null;
+      var order = D.meta.measures.map(function (m, j) { return j; });
+      if (c) order.sort(function (p, q) { var a = c.measures[D.meta.measures[p]], b = c.measures[D.meta.measures[q]]; return (b ? b[0] + b[1] : 0) - (a ? a[0] + a[1] : 0) || p - q; });
+      var opts = order.map(function (j) { var m = D.meta.measures[j], v = c && c.measures[m], n = v ? v[0] + v[1] : 0;
+        return '<option value="' + j + '">' + esc(lab(m)) + (c ? (n ? ' (' + n + ' contrast' + (n === 1 ? '' : 's') + ')' : ' (untested)') : '') + '</option>'; }).join('');
+      var sid = 'm-' + kind + i, bid = 'b-' + kind + i;
+      var cmp = c ? '<label for="' + bid + '">Compared with</label><select id="' + bid + '"><option value="measure">what this measure usually shows</option><option value="class">its class (' + esc(c['class']) + ')</option></select>' : '';
+      el.innerHTML = '<div class="vbar"><label for="' + sid + '">Measure</label><select id="' + sid + '">' + opts + '</select>' +
+        '<div class="seg" role="group" aria-label="Direction"><button type="button" data-d="less" aria-pressed="true">Less in patients</button><button type="button" data-d="more" aria-pressed="false">More in patients</button></div>' + cmp + '</div><p class="vnote"></p>' +
+        '<div class="views">' + VIEWS.map(function (w) { return '<figure><canvas role="img"></canvas><figcaption>' + w.cap + '</figcaption></figure>'; }).join('') + '</div>' +
+        '<div class="scale"><span>Weaker</span><i></i><span>Stronger. Coloured: where peaks are more likely than the comparison, at 35% or more of this map’s largest excess. Grey: the rest of the brain.</span></div>' +
+        (c ? '<div class="built"><h3>What this prediction is built from</h3><div class="stack" role="img"></div><p class="legend"></p></div>' : '') +
+        '<h3>Top regions</h3><p class="sub small" style="margin:0">Ranked by how much more of the predicted peaks fall in each region than under the comparison. Shown: the region’s share of predicted peaks, and that share relative to the comparison.</p><ol class="regions"></ol><p class="sub small atlas" style="margin-top:6px"></p>';
+      var sel = el.querySelector('#' + sid), bsel = el.querySelector('#' + bid), dir = 'less';
+      function setDir(d) { dir = d; Array.prototype.forEach.call(el.querySelectorAll('.seg button'), function (x) { x.setAttribute('aria-pressed', String(x.getAttribute('data-d') === d)); }); }
+      function render() {
+        var j = +sel.value, m = D.meta.measures[j], md = mdir(m, dir), blk = D.meta.blocks[m + '|' + dir], ids = [blk], bids = [blk], note = '', cls = 'vnote';
+        if (c) {
+          var fam = D.meta.family[m], f = c.fam[md][fam], cell = c.cells[j][dir === 'less' ? 0 : 1], n = cell[0], rel = related(c, m, dir) - n;
+          ids = ids.concat(c.base[md], c.cls[md]); if (f != null) ids.push(f);
+          if (bsel.value === 'class') bids = bids.concat(c.cls[md]);
+          var dl = dir === 'less' ? 'less in patients' : 'more in patients';
+          if (!n) { note = 'Untested: no published ' + lab(m).toLowerCase() + ' contrast reports ' + dl + ' for this condition. '; cls += ' inferred';
+            note += rel ? 'The prediction leans on ' + rel + ' contrast' + (rel === 1 ? '' : 's') + ' from its other ' + fam + ' measures in the same direction, its parent conditions and its class.' : 'It has no related ' + fam + ' contrasts either, so the prediction comes from the condition across all measures, its parents and its class.'; }
+          else note = n + ' published contrast' + (n === 1 ? '' : 's') + ' in this measure and direction' + (rel ? ', plus ' + rel + ' in related ' + fam + ' measures.' : '.');
+          var tr = c.transfer && c.transfer[m];
+          if (tr) note += ' When this measure was withheld, the rest predicted its peaks ' + (tr[0] >= 0 ? 'better' : 'worse') + ' than the measure’s usual pattern (' + sg(tr[0], 2) + ' per peak, ' + tr[1] + ' peaks).';
+          // what the map is built from: share of the variation over the brain added by each group of labels
+          var own = [], parents = c.base[md].slice(); if (c.own[md]) own.push(parents.shift()); if (f != null) own.push(f);
+          var w = [own, parents, c.cls[md]].map(function (g) { return g.length ? variance(field(g)) : 0; }), tot = w[0] + w[1] + w[2] || 1;
+          var names = ['This condition', 'Parent conditions', 'Class and all conditions'];
+          el.querySelector('.stack').innerHTML = w.map(function (x, q) { return '<i class="s' + q + '" style="width:' + (100 * x / tot).toFixed(1) + '%"></i>'; }).join('');
+          el.querySelector('.stack').setAttribute('aria-label', names.map(function (nm, q) { return nm + ' ' + Math.round(100 * w[q] / tot) + '%'; }).join(', '));
+          el.querySelector('.legend').innerHTML = names.map(function (nm, q) { return '<span><i class="sw s' + q + '"></i>' + nm + ' ' + Math.round(100 * w[q] / tot) + '%</span>'; }).join('') + '<span>Share of the pattern’s variation over the brain.</span>';
+          Array.prototype.forEach.call(main.querySelectorAll('.cellbtn'), function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-j') === j && b.getAttribute('data-d') === dir)); });
+        } else { ids = ids.concat(k.ids[md]); note = 'What the class adds to this measure’s usual pattern, shared by every condition in it.'; }
+        var p = el.querySelector('.vnote'); p.className = cls; p.textContent = note;
+        var pm = prob(ids, j), pb = prob(bids, j), vals = new Float32Array(G.V), mx = 0;
+        for (var q = 0; q < G.V; q++) { var dlt = pm[q] - pb[q]; if (dlt > 0) { vals[q] = dlt; if (dlt > mx) mx = dlt; } }
+        Array.prototype.forEach.call(el.querySelectorAll('canvas'), function (cv, wv) { drawView(cv, vals, mx || 1, VIEWS[wv].a, VIEWS[wv].b); cv.setAttribute('aria-label', lab(m) + ', ' + VIEWS[wv].cap); });
+        var Rg = topRegions(pm, pb, j), top = Rg.list.length ? Rg.list[0].share : 1;
+        el.querySelector('.regions').innerHTML = Rg.list.length ? Rg.list.map(function (r) { return '<li><span>' + esc(r.name) + '</span><span class="rbar"><i style="width:' + (100 * r.share / top).toFixed(0) + '%"></i></span><span class="rv">' + (100 * r.share).toFixed(1) + '%</span><span class="rl">' + r.lift.toFixed(2) + '×</span></li>'; }).join('') : '<li><span class="sub">No region stands out from the comparison.</span></li>';
+        el.querySelector('.atlas').textContent = Rg.atlas === 'gm' ? 'Regions from the Harvard-Oxford atlas (cortical and subcortical). It does not cover the cerebellum, which is assigned by position.' : 'Regions from the ' + Rg.atlas + '.';
+      }
+      sel.addEventListener('change', render); if (bsel) bsel.addEventListener('change', render);
+      Array.prototype.forEach.call(el.querySelectorAll('.seg button'), function (b) { b.addEventListener('click', function () { setDir(b.getAttribute('data-d')); render(); }); });
+      if (c) { current = {set: function (j, d, scroll) { sel.value = String(j); setDir(d); render(); if (scroll) el.scrollIntoView({behavior: 'smooth', block: 'start'}); }};
+        if (init) { sel.value = String(init.j); setDir(init.d); } }
+      render();
+    });
+  }
+
+  // ---- views ----
+  function gapRow(g) {
+    var c = D.conditions[g.i], m = D.meta.measures[g.j];
+    return '<tr class="row" data-h="' + cellHash(g.i, g.j, g.d).slice(1) + '"><td><a class="cname" href="' + cellHash(g.i, g.j, g.d) + '">' + cname(g.i) + '</a><div class="where">' + esc(cap(c['class'])) + '</div></td>' +
+      '<td>' + esc(lab(m)) + '<div>' + dirTag(g.d) + '</div></td><td class="num">' + g.n + '</td><td>' + (regionNames(m, g.cell).map(esc).join('; ') || '<span class="sub">No region stands out</span>') + '</td>' +
+      '<td class="num">' + Math.round(100 * g.spec) + '%</td><td class="num">' + g.rel + '</td><td>' + trackTag(m) + '</td></tr>';
+  }
+  var GAPHEAD = '<thead><tr><th>Condition</th><th>Predicted for</th><th class="num">Published</th><th>Where the model expects peaks</th><th class="num" title="Share of predicted peaks that move relative to the class’s pattern">Specific</th><th class="num" title="Contrasts of this condition in related measures, same direction">Related</th><th title="How well withheld measures of this kind were predicted">Track record</th></tr></thead>';
+  function rowClicks(tb) { tb.addEventListener('click', function (e) { var tr = e.target.closest('tr.row'); if (tr && !e.target.closest('a')) location.hash = tr.getAttribute('data-h'); }); }
+
+  function viewStart() {
+    var m = D.meta, t = m.tests, f = t.future || {};
+    var gaps = GAPS.filter(function (g) { return g.n === 0; }).sort(function (a, b) { return gapScore(b) - gapScore(a); }), seen = {}, top = [];
+    gaps.forEach(function (g) { if (top.length < 5 && !seen[g.i]) { seen[g.i] = 1; top.push(g); } });
+    var deps = DEPS.slice(0, 5), prs = D.pairs.slice(0, 5);
+    main.innerHTML = '<h1>Find a hypothesis the literature has not tested</h1>' +
+      '<p>' + m.papers.toLocaleString() + ' papers have compared patients with healthy controls and reported where the brain differs, across ' + m.conditions_all.toLocaleString() + ' conditions and 14 imaging measures. Most combinations of condition and measure have never been published. This atlas fits one model to all ' + m.contrasts.toLocaleString() + ' contrasts and shows what it predicts for the missing ones, where published results depart from the pattern, and which conditions look alike.</p>' +
+      '<div class="routes">' +
+      '<section><h2>Untested predictions</h2><p class="sub small">A condition and measure with no published contrast, where the model expects a pattern of the condition’s own.</p><ol>' +
+        top.map(function (g) { var mm = m.measures[g.j]; return '<li><a href="' + cellHash(g.i, g.j, g.d) + '">' + cname(g.i) + ': ' + esc(lab(mm).toLowerCase()) + ', ' + g.d + ' in patients</a><span>' + esc(regionNames(mm, g.cell).slice(0, 2).join('; ')) + '</span></li>'; }).join('') +
+        '</ol><a class="all" href="#gaps">All ' + gaps.length.toLocaleString() + ' untested predictions →</a></section>' +
+      '<section><h2>Departures</h2><p class="sub small">A published measure whose peaks fall somewhere other than the condition’s remaining measures suggest.</p><ol>' +
+        deps.map(function (x) { return '<li><a href="' + cellHash(x.i, x.j, 'less') + '">' + cname(x.i) + ': ' + esc(lab(x.m).toLowerCase()) + '</a><span>' + sg(x.gain, 2) + ' per peak against the measure’s usual pattern, ' + x.peaks + ' peaks</span></li>'; }).join('') +
+        '</ol><a class="all" href="#departures">All ' + DEPS.length + ' withheld measures →</a></section>' +
+      '<section><h2>Cross-class pairs</h2><p class="sub small">Two conditions from different diagnostic classes whose own patterns of tissue loss overlap.</p><ol>' +
+        prs.map(function (p) { return '<li><a href="#c-' + p[0] + '">' + cname(p[0]) + '</a> and <a href="#c-' + p[1] + '">' + cname(p[1]).toLowerCase() + '</a><span>Similarity ' + p[2].toFixed(2) + ' · ' + esc(D.conditions[p[0]]['class']) + ' and ' + esc(D.conditions[p[1]]['class']) + '</span></li>'; }).join('') +
+        '</ol><a class="all" href="#pairs">All ' + D.pairs.length + ' pairs →</a></section></div>' +
+      '<h2>How far to trust a prediction</h2><p class="sub">Gain in log-likelihood per held-out peak over knowing only the measure. Zero means the condition told the model nothing.</p>' +
+      '<div class="trust"><div><b>' + sg(t.paper) + '</b><span>A fifth of the papers withheld (95% interval ' + sg(t.paper_ci[0]) + ' to ' + sg(t.paper_ci[1]) + ')</span></div>' +
+      '<div><b>' + sg(t.cell) + '</b><span>One whole measure withheld for a well-studied condition; the model beat the measure’s usual pattern in ' + Math.round(100 * t.cell_won) + '% of cases</span></div>' +
+      '<div><b>' + sg(f['condition seen, measure new']) + '</b><span>Papers from 2020 on, for a measure that was new for the condition, fitted to earlier papers only</span></div></div>' +
+      '<p>The gains are real and small. A prediction is a reason to look, not a finding. It is strongest where the condition has many contrasts in related measures and where that kind of measure has a good track record. <a href="#about">Method and limits</a></p>';
+  }
+
+  function viewGaps() {
+    var classes = {}; D.conditions.forEach(function (c) { classes[c['class']] = 1; });
+    var copts = Object.keys(classes).sort().map(function (k) { return '<option value="' + esc(k) + '">' + esc(cap(k)) + '</option>'; }).join('');
+    var mopts = D.meta.measures.map(function (m, j) { return '<option value="' + j + '">' + esc(lab(m)) + '</option>'; }).join('');
+    main.innerHTML = '<h1>Untested predictions</h1>' +
+      '<p class="sub">Combinations of condition, measure and direction with at most three published contrasts, where the condition has its own estimate in that direction. Each row is a candidate study: the model says where peaks should fall if someone ran it.</p>' +
+      '<div class="controls"><input id="gq" type="search" placeholder="Search conditions, for example dementia" aria-label="Search conditions">' +
+      '<select id="gcls" aria-label="Class"><option value="">All classes</option>' + copts + '</select><select id="gm" aria-label="Measure"><option value="">All measures</option>' + mopts + '</select>' +
+      '<select id="gst" aria-label="Published contrasts"><option value="0">Untested (0 contrasts)</option><option value="3">Barely tested (1 to 3)</option><option value="all">Both</option></select>' +
+      '<label for="gsort">Sort by</label><select id="gsort"><option value="score">Best supported and specific</option><option value="spec">Most specific to the condition</option><option value="rel">Most related evidence</option><option value="track">Track record of the measure</option></select></div>' +
+      '<p class="sub small" id="gcount"></p><div class="scroll"><table>' + GAPHEAD + '<tbody id="grows"></tbody></table></div><button type="button" class="more-btn" id="gmore" hidden>Show 60 more</button><p class="empty" id="gnone" hidden>No prediction matches.</p>' +
+      '<p class="sub small" style="margin-top:14px">Specific: share of predicted peaks that move relative to the class’s pattern. Related: published contrasts of the condition in the same family of measures and direction. Track record: gain per peak when a measure of this kind was withheld for a condition and predicted from the rest; green is +0.03 or more.</p>';
+    var ids = ['gq', 'gcls', 'gm', 'gst', 'gsort'], el = {}; ids.forEach(function (k) { el[k] = document.getElementById(k); try { var v = sessionStorage.getItem('cba-' + k); if (v != null) el[k].value = v; } catch (e) {} });
+    var rows = document.getElementById('grows'), more = document.getElementById('gmore'), none = document.getElementById('gnone'), count = document.getElementById('gcount'), shown = 60;
+    function draw() {
+      var t = el.gq.value.trim().toLowerCase(), k = el.gcls.value, mj = el.gm.value, st = el.gst.value, so = el.gsort.value;
+      var list = GAPS.filter(function (g) { var c = D.conditions[g.i];
+        return (!k || c['class'] === k) && (mj === '' || g.j === +mj) && (st === 'all' || (st === '0' ? g.n === 0 : g.n > 0)) && (!t || c.name.toLowerCase().indexOf(t) >= 0 || c['class'].indexOf(t) >= 0); });
+      var key = so === 'spec' ? function (g) { return g.spec; } : so === 'rel' ? function (g) { return g.rel; } : so === 'track' ? function (g) { return (g.track == null ? -1 : g.track) + g.spec / 100; } : gapScore;
+      list.sort(function (a, b) { return key(b) - key(a); });
+      rows.innerHTML = list.slice(0, shown).map(gapRow).join(''); more.hidden = list.length <= shown; none.hidden = list.length > 0;
+      count.textContent = list.length.toLocaleString() + ' prediction' + (list.length === 1 ? '' : 's') + (list.length > shown ? ', showing the first ' + shown : '');
+      ids.forEach(function (q) { try { sessionStorage.setItem('cba-' + q, el[q].value); } catch (e) {} });
+    }
+    ids.forEach(function (q) { el[q].addEventListener(q === 'gq' ? 'input' : 'change', function () { shown = 60; draw(); }); });
+    more.addEventListener('click', function () { shown += 60; draw(); }); rowClicks(rows); draw();
+  }
+
+  function viewDepartures() {
+    main.innerHTML = '<h1>Departures</h1>' +
+      '<p class="sub">For well-studied conditions, one whole measure was withheld and predicted from everything else. A negative gain means the published peaks in that measure fall somewhere other than the condition’s remaining measures suggest. That can be a measure-specific effect worth explaining, or mixed patient groups under one label.</p>' +
+      '<div class="controls"><input id="dq" type="search" placeholder="Search conditions" aria-label="Search conditions"><label for="dsort">Show first</label><select id="dsort"><option value="neg">Departs from the rest</option><option value="pos">Follows the rest</option></select></div>' +
+      '<div class="scroll"><table><thead><tr><th>Condition</th><th>Measure withheld</th><th class="num">Gain per peak</th><th class="num">Peaks</th><th>Reading</th></tr></thead><tbody id="drows"></tbody></table></div><p class="empty" id="dnone" hidden>No condition matches.</p>';
+    var q = document.getElementById('dq'), so = document.getElementById('dsort'), rows = document.getElementById('drows'), none = document.getElementById('dnone');
+    function draw() {
+      var t = q.value.trim().toLowerCase(), list = DEPS.filter(function (x) { return !t || D.conditions[x.i].name.toLowerCase().indexOf(t) >= 0; });
+      if (so.value === 'pos') list = list.slice().reverse();
+      rows.innerHTML = list.map(function (x) { return '<tr class="row" data-h="' + cellHash(x.i, x.j, 'less').slice(1) + '"><td><a class="cname" href="' + cellHash(x.i, x.j, 'less') + '">' + cname(x.i) + '</a><div class="where">' + esc(cap(D.conditions[x.i]['class'])) + '</div></td><td>' + esc(lab(x.m)) + '</td><td class="num">' + sg(x.gain, 3) + '</td><td class="num">' + x.peaks + '</td><td><span class="tag ' + (x.gain < -0.02 ? 'weak' : x.gain > 0.02 ? 'good' : '') + '">' + (x.gain < -0.02 ? 'Departs from the rest' : x.gain > 0.02 ? 'Follows the rest' : 'No different from the measure alone') + '</span></td></tr>'; }).join('');
+      none.hidden = list.length > 0;
+    }
+    q.addEventListener('input', draw); so.addEventListener('change', draw); rowClicks(rows); draw();
+  }
+
+  function viewPairs() {
+    main.innerHTML = '<h1>Cross-class pairs</h1>' +
+      '<p class="sub">Conditions from different diagnostic classes whose own patterns overlap most. The comparison uses the part of each pattern that is specific to the condition and its parent conditions, for less tissue in patients; 1.00 is identical. A pair can reflect shared patients, such as depression studied after stroke, as well as shared anatomy.</p>' +
+      '<div class="scroll"><table><thead><tr><th>Condition</th><th>Condition</th><th class="num">Similarity</th></tr></thead><tbody>' +
+      D.pairs.map(function (p) { return '<tr><td><a class="cname" href="#c-' + p[0] + '">' + cname(p[0]) + '</a><div class="where">' + esc(cap(D.conditions[p[0]]['class'])) + ' · ' + D.conditions[p[0]].contrasts + ' contrasts</div></td><td><a class="cname" href="#c-' + p[1] + '">' + cname(p[1]) + '</a><div class="where">' + esc(cap(D.conditions[p[1]]['class'])) + ' · ' + D.conditions[p[1]].contrasts + ' contrasts</div></td><td class="num">' + p[2].toFixed(2) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  }
+
+  function viewConditions() {
+    var classes = {}; D.conditions.forEach(function (c) { classes[c['class']] = 1; });
+    var opts = Object.keys(classes).sort().map(function (k) { return '<option value="' + esc(k) + '">' + esc(cap(k)) + '</option>'; }).join('');
+    main.innerHTML = '<h1>Conditions</h1>' +
+      '<p class="sub">' + D.meta.conditions_shown + ' conditions with at least ' + D.meta.min_contrasts + ' patient-versus-control contrasts, out of ' + D.meta.conditions_all.toLocaleString() + ' in the data. <a href="#classes">Browse the ' + D.classes.length + ' classes</a></p>' +
+      '<div class="controls"><input id="q" type="search" placeholder="Search conditions, for example dementia" aria-label="Search conditions"><select id="cls" aria-label="Class"><option value="">All classes</option>' + opts + '</select></div>' +
+      '<div class="scroll"><table><thead><tr><th>Condition</th><th>Class</th><th class="num">Contrasts</th><th class="num">Papers</th><th class="num" title="Measure and direction combinations with no published contrast">Untested cells</th><th>Its own pattern</th></tr></thead><tbody id="rows"></tbody></table></div><p class="empty" id="none" hidden>No condition matches.</p>';
+    var q = document.getElementById('q'), cls = document.getElementById('cls'), rows = document.getElementById('rows'), none = document.getElementById('none');
+    try { q.value = sessionStorage.getItem('cba-q') || ''; cls.value = sessionStorage.getItem('cba-cls') || ''; } catch (e) {}
+    function draw() {
+      var t = q.value.trim().toLowerCase(), k = cls.value, html = [];
+      D.conditions.forEach(function (c, i) {
+        if (k && c['class'] !== k) return;
+        if (t && c.name.toLowerCase().indexOf(t) < 0 && c['class'].indexOf(t) < 0) return;
+        var un = 0; c.cells.forEach(function (p) { un += (p[0][0] === 0) + (p[1][0] === 0); });
+        html.push('<tr class="row" data-h="c-' + i + '"><td><a class="cname" href="#c-' + i + '">' + esc(cap(c.name)) + '</a></td><td>' + esc(cap(c['class'])) + '</td><td class="num">' + c.contrasts.toLocaleString() + '</td><td class="num">' + c.papers.toLocaleString() + '</td><td class="num">' + un + ' of 28</td><td class="sub">' + strength(c) + '</td></tr>');
+      });
+      rows.innerHTML = html.join(''); none.hidden = html.length > 0;
+      try { sessionStorage.setItem('cba-q', q.value); sessionStorage.setItem('cba-cls', cls.value); } catch (e) {}
+    }
+    q.addEventListener('input', draw); cls.addEventListener('change', draw); rowClicks(rows); draw();
+  }
+
+  function viewCondition(i) {
+    var c = D.conditions[i]; if (!c) return viewConditions();
+    var mx = 1; c.cells.forEach(function (p) { mx = Math.max(mx, p[0][0], p[1][0]); });
+    var order = D.meta.measures.map(function (m, j) { return j; }).sort(function (p, q) { return (c.cells[q][0][0] + c.cells[q][1][0]) - (c.cells[p][0][0] + c.cells[p][1][0]) || p - q; });
+    function btn(j, k) { var n = c.cells[j][k][0], d = DIRS[k], m = D.meta.measures[j];
+      return '<td><button type="button" class="cellbtn ' + (n ? (k ? 'm' : '') : 'none') + '" data-j="' + j + '" data-d="' + d + '" aria-pressed="false" aria-label="' + esc(lab(m)) + ', ' + d + ' in patients, ' + (n ? n + ' contrasts' : 'untested') + '">' + (n ? '<i style="width:' + Math.max(4, 100 * Math.sqrt(n / mx)).toFixed(0) + '%"></i><span>' + n + '</span>' : '<span>untested</span>') + '</button></td>'; }
+    var grid = order.map(function (j) { var m = D.meta.measures[j], tr = c.transfer && c.transfer[m];
+      return '<tr><td>' + esc(lab(m)) + '</td>' + btn(j, 0) + btn(j, 1) + '<td class="num">' + (tr ? sg(tr[0], 2) : '') + '</td></tr>'; }).join('');
+    var near = c.near.map(function (x) { return '<li><a href="#c-' + x[0] + '">' + cname(x[0]) + '<span>' + x[1].toFixed(2) + '</span></a></li>'; }).join('');
+    var par = c.parent != null && D.conditions[c.parent] ? ' · a kind of <a href="#c-' + c.parent + '">' + esc(D.conditions[c.parent].name) + '</a>' : '';
+    var kids = c.kids && c.kids.length ? '<h2>More specific conditions</h2><p class="sub">This entry pools groups described in general terms. The specific conditions build on it.</p><ul class="near">' + c.kids.map(function (k) { return '<li><a href="#c-' + k + '">' + cname(k) + '<span>' + D.conditions[k].contrasts + '</span></a></li>'; }).join('') + '</ul>' : '';
+    var cross = D.pairs.filter(function (p) { return p[0] === i || p[1] === i; }).map(function (p) { var o = p[0] === i ? p[1] : p[0]; return '<li><a href="#c-' + o + '">' + cname(o) + '<span>' + p[2].toFixed(2) + ' · ' + esc(D.conditions[o]['class']) + '</span></a></li>'; }).join('');
+    main.innerHTML = '<h1>' + esc(cap(c.name)) + '</h1>' +
+      '<div class="chips"><span>' + esc(cap(c['class'])) + par + '</span><span><b>' + c.contrasts.toLocaleString() + '</b> contrasts</span><span><b>' + c.papers.toLocaleString() + '</b> papers</span><span><b>' + strength(c) + '</b></span></div>' +
+      '<h2>What has been published, and what has not</h2><p class="sub">Published contrasts for each measure and direction. Choose any cell to see its map below, including the untested ones, where the map is a prediction.</p>' +
+      '<div class="scroll" style="max-width:640px"><table class="grid"><thead><tr><th>Measure</th><th class="num">Less in patients</th><th class="num">More in patients</th><th class="num" title="Gain per peak when this measure was withheld and predicted from the rest">Withheld test</th></tr></thead><tbody id="cgrid">' + grid + '</tbody></table></div>' +
+      '<h2>Brain pattern</h2><p class="sub">Where the model expects more reported differences for this condition than the comparison. Each map is scaled to its own strongest point.</p>' +
+      viewerHTML('c', i) + kids +
+      '<h2>Most similar conditions</h2><p class="sub">By the part of the pattern that is specific to the condition and its parent conditions (less tissue in patients); 1.00 is identical. Subtypes of one condition are similar partly by construction, because they share its estimate.</p><ul class="near">' + near + '</ul>' +
+      (cross ? '<h3>From other classes</h3><ul class="near">' + cross + '</ul>' : '') +
+      '<a class="back" href="#conditions">← All conditions</a>';
+    document.getElementById('cgrid').addEventListener('click', function (e) { var b = e.target.closest('.cellbtn'); if (b && current) current.set(+b.getAttribute('data-j'), b.getAttribute('data-d'), true); });
+  }
+
+  function viewClasses() {
+    main.innerHTML = '<h1>Classes</h1><p class="sub">Every condition belongs to a broad class. The class pattern is what its conditions have in common, and it carries most of what the model can predict.</p>' +
+      D.classes.map(function (k, i) { return '<section class="netcard"><h2><a href="#k-' + i + '">' + esc(cap(k.name)) + '</a></h2><div class="chips"><span><b>' + k.conditions + '</b> conditions shown</span><span><b>' + k.contrasts.toLocaleString() + '</b> contrasts</span></div><ul class="near">' +
+        k.top.map(function (j) { return '<li><a href="#c-' + j + '">' + cname(j) + '<span>' + D.conditions[j].contrasts + '</span></a></li>'; }).join('') + '</ul></section>'; }).join('');
+  }
+  function viewClass(i) {
+    var k = D.classes[i]; if (!k) return viewClasses();
+    main.innerHTML = '<h1>' + esc(cap(k.name)) + '</h1><div class="chips"><span><b>' + k.conditions + '</b> conditions shown</span><span><b>' + k.contrasts.toLocaleString() + '</b> contrasts</span></div>' +
+      '<h2>Brain pattern</h2>' + viewerHTML('k', i) + '<h2>Largest conditions</h2><ul class="near">' + k.top.map(function (j) { return '<li><a href="#c-' + j + '">' + cname(j) + '<span>' + D.conditions[j].contrasts + '</span></a></li>'; }).join('') + '</ul><a class="back" href="#classes">← All classes</a>';
+  }
+
+  function viewAbout() {
+    var m = D.meta, t = m.tests || {}, f = t.future || {}, bm = t.cell_by_measure || {};
+    function row(name, v, extra) { return '<tr><td>' + name + '</td><td class="num">' + (v == null ? '' : sg(v)) + '</td><td class="sub">' + (extra || '') + '</td></tr>'; }
+    var tr = Object.keys(bm).sort(function (a, b) { return bm[b][0] - bm[a][0]; }).map(function (k) { return '<tr><td>' + esc(lab(k)) + '</td><td class="num">' + sg(bm[k][0]) + '</td><td class="num">' + bm[k][1].toLocaleString() + '</td></tr>'; }).join('');
+    main.innerHTML = '<h1>Method and limits</h1>' +
+      '<div class="chips"><span><b>' + m.contrasts.toLocaleString() + '</b> contrasts</span><span><b>' + m.papers.toLocaleString() + '</b> papers</span><span><b>' + m.peaks.toLocaleString() + '</b> reported peaks</span><span><b>' + m.conditions_all.toLocaleString() + '</b> conditions</span><span><b>14</b> measures</span></div>' +
+      '<h2>The data</h2><p>Every contrast compares a patient group with healthy controls and reports where in the brain they differ, in one of 14 measures: grey and white matter volume, cortical thickness, diffusion, resting-state activity, metabolism, perfusion, tracer binding, task activation and EEG or MEG sources. A patient group with several conditions counts toward each of them. Each reported coordinate is one point on a 4 mm grid and counts once.</p>' +
+      '<h2>The model</h2><p>A regression predicts where a contrast’s peaks fall. It starts from where the contrast’s measure usually reports differences and adds a smooth map for each label the contrast carries: the condition, its parent conditions, its class, and the condition within a family of related measures. Every label is separate for “less in patients” and “more in patients”, so the two directions share nothing but the measure’s usual pattern. Higher diffusivity is counted with “less”, because it marks the same damage as lower anisotropy.</p><p>A penalty keeps a label’s map near zero unless it has enough contrasts, so a rare subtype leans on its parents and its class. The maps are sums of smooth bumps 8 mm wide.</p>' +
+      '<h2>How well does it predict?</h2><p>Gain in log-likelihood per held-out peak over knowing only the measure; positive is better.</p>' +
+      '<div class="scroll"><table><thead><tr><th>Withheld</th><th class="num">Gain</th><th></th></tr></thead><tbody>' +
+      row('A fifth of the papers', t.paper, t.paper_ci ? '95% interval ' + sg(t.paper_ci[0]) + ' to ' + sg(t.paper_ci[1]) + ', from resampling papers' : '') + row('One whole measure for a well-studied condition', t.cell, 'The model won in ' + Math.round(100 * (t.cell_won || 0)) + '% of cases') + row('Papers from 2020 on, fitted to earlier papers', f.all) +
+      row('… of those, a combination seen five or more times before', f['cell seen 5+ times']) + row('… of those, a measure new for a known condition', f['condition seen, measure new'], 'The hardest case, and the one “Untested predictions” relies on') + row('… of those, a condition not seen before', f['condition unseen']) + '</tbody></table></div>' +
+      '<h2>Track record by measure</h2><p>Gain per peak when the measure was withheld for a condition and predicted from the rest. Predictions for diffusion and metabolism have worked best; task activation and EEG or MEG sources have barely worked.</p>' +
+      '<div class="scroll" style="max-width:520px"><table><thead><tr><th>Measure withheld</th><th class="num">Gain</th><th class="num">Peaks</th></tr></thead><tbody>' + tr + '</tbody></table></div>' +
+      '<h2>What was tried and dropped</h2><p>Each addition to the model had to improve predictions on withheld papers. A separate penalty for the family-level labels and counting diffusivity by its meaning passed. A learned matrix linking every measure to every other did not: it predicted worse than the fixed families at every size tried. An earlier version built on shared networks predicted about half as well.</p>' +
+      '<h2>Limits</h2><p>The maps are single best estimates with no uncertainty intervals. The gains are small: knowing the condition adds well under half of what knowing the measure adds, and most of it comes from the broad class. Peaks say where a difference was reported, not how large it was. The model learns from what was published, including where researchers chose to look. Conditions, measures and directions were read from papers by language models and are not individually checked.</p>';
+  }
+
+  function route() {
+    if (!D) return;
+    var h = (location.hash || '#start').slice(1), cm = /^c-(\d+)(?:-m(\d+)-(less|more))?$/.exec(h);
+    var v = cm || h === 'conditions' || h === 'classes' || /^k-\d+$/.test(h) ? 'conditions' : ['gaps', 'departures', 'pairs', 'about'].indexOf(h) >= 0 ? h : 'start', init = null;
+    Array.prototype.forEach.call(document.querySelectorAll('#nav a'), function (a) { a.classList.toggle('on', a.getAttribute('data-v') === v); });
+    if (cm) { viewCondition(+cm[1]); if (cm[2] != null && +cm[2] < D.meta.measures.length) init = {j: +cm[2], d: cm[3]}; }
+    else if (/^k-\d+$/.test(h)) viewClass(+h.slice(2)); else if (h === 'classes') viewClasses(); else if (h === 'conditions') viewConditions();
+    else if (h === 'gaps') viewGaps(); else if (h === 'departures') viewDepartures(); else if (h === 'pairs') viewPairs(); else if (h === 'about') viewAbout(); else viewStart();
+    mountViewers(init); window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', route);
+  Promise.all([fetch('data.json').then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }),
+               fetch('maps.txt').then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }).then(function (t) {   // maps.bin as base64: the host serves no binary type
+                 var bin = atob(t.trim()), u = new Uint8Array(bin.length); for (var q = 0; q < bin.length; q++) u[q] = bin.charCodeAt(q); return u.buffer; })])
+    .then(function (x) { D = x[0]; loadMaps(x[1]); build(); route(); })
+    .catch(function () { main.innerHTML = '<p class="empty">The atlas data did not load. Reload the page to try again.</p>'; });
+})();
+</script>
