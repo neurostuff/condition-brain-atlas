@@ -58,4 +58,4 @@ Baseline questions answered; additions 1 to 3 tested (numbers in NOTES.md, same 
 | 2 | Splitting labels by direction DROPPED. Direction by meaning (diffusivity flipped) KEPT: +0.004 on held-out measures, no parameters |
 | 3 | Learned coupling DROPPED: worse than fixed family labels on every test at every rank and penalty tried; loadings collapse onto the direction indicators |
 
-Kept model: `--window-from foci --lam 20 --pen fam=5 --variant full+meaning`. Next by the stopping rule: addition 5 (intervals).
+Kept model: `--window-from foci --lam 20 --pen fam=5 --variant full+dirsplit+meaning`. The split by direction was adopted afterwards for map interpretation ("more grey matter" no longer inherits a condition's "less" pattern); it scores the same as the unsplit model on all three tests. Next by the stopping rule: addition 5 (intervals).
