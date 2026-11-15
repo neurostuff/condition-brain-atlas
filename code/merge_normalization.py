@@ -35,7 +35,7 @@ def resolve(name, cls=None, parent=None):
     if squash(name) in by_squash:
         return by_squash[squash(name)]
     p = resolve(parent) if parent and parent.strip().lower() != name else None
-    vocab[name] = {"class": cls or (vocab[p]["class"] if p else "psychiatric_other"), "parent": p}; by_squash[squash(name)] = name; n["new names"] += 1
+    vocab[name] = {"class": cls or (vocab[p]["class"] if p else "unclassified"), "parent": p}; by_squash[squash(name)] = name; n["new names"] += 1
     return name
 
 

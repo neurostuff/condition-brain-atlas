@@ -6,6 +6,9 @@ Fits checks.py's regression on all contrasts and writes OUT_DIR/data.json and OU
 the page: P(v) = softmax_v(log window[measure, v] + Phi[v] . (A[block] + sum of A over the cell's labels)); the labels of
 (condition, measure, direction) are, with dn the direction by meaning (flipped for the measures in checks.FLIP):
 "c | dn | family" if it exists, "x | dn" for the condition and each ancestor x (parent conditions, class, any condition).
+A contrast counts toward its primary conditions only (primary.py); "also" is the number of contrasts that list the condition
+for their patients without it being the diagnosis. meta.corpus: contrasts with such additional conditions, contrasts whose
+diagnosis could not be told apart from the rest of the list (shared by all listed conditions), meta-analysis papers dropped.
 maps.bin as export_site_reg.py: Phi sparse, A int8 with a scale per label, log windows per measure, grid ijk, atlas labels.
 Per condition and cell (measure x reported direction): contrasts; share of predicted peaks that move relative to the
 measure's usual pattern and relative to the class's (total variation distance); the three regions gaining most.
@@ -47,9 +50,10 @@ meas = sorted({b.split(" | ")[0] for b in names}, key=lambda m: list(LABEL).inde
 mdir = lambda m, dn: ({"less": "more", "more": "less"}[dn] if m in K.FLIP else dn)      # direction by meaning
 # conditions
 voc = {v["condition"]: v for v in json.load(open(vocab))}; is_cls = lambda x: x[6:].startswith(("class ", "any condition"))
-cm = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0])); papers = collections.defaultdict(set)
+cm = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0])); papers = collections.defaultdict(set); also = collections.Counter()
 for d in H["docs"].values():
     for i in d["ids"]:
+        if i.startswith("x:all:"): also[i[6:]] += 1        # listed for the patients without being their diagnosis (build_corpus.py LABELS=primary)
         if i.startswith("c:all:") and not is_cls(i):
             c = i[6:].split(" | ")[0]; cm[c][d["measure"]][d["direction"] == "increase"] += 1; papers[c].add(d["group"])
 tot = {c: sum(a + b for a, b in v.values()) for c, v in cm.items()}
@@ -70,7 +74,7 @@ for i, c in enumerate(keep):
     for dn in ("less", "more"): need.update(base[dn] + cls[dn] + list(fams[dn].values()))
     spec[i] = A[base["less"] + ([fams["less"]["structure"]] if "structure" in fams["less"] else [])].sum(0)
     info = voc.get(c) or {}
-    cons.append({"name": c, "class": (info.get("class") or "other").replace("_", " "), "parent": cid.get(info.get("parent")), "contrasts": tot[c], "papers": len(papers[c]),
+    cons.append({"name": c, "class": (info.get("class") or "other").replace("_", " "), "parent": cid.get(info.get("parent")), "contrasts": tot[c], "papers": len(papers[c]), "also": also.get(c, 0),
                  "measures": {m: v for m, v in sorted(cm[c].items(), key=lambda kv: -sum(kv[1]))}, "base": base, "cls": cls, "fam": fams, "own": own,
                  "kids": [cid[x] for x in keep if (voc.get(x) or {}).get("parent") == c]})
 Dm = spec @ Phi.T; st = Dm.std(1); Z = (Dm - Dm.mean(1, keepdims=True)) / np.maximum(Dm.std(1, keepdims=True), 1e-9); R = Z @ Z.T / V; np.fill_diagonal(R, -9)
@@ -204,7 +208,10 @@ for nm_, arr in (("phi_ptr", ptr), ("a_scale", sc.astype(np.float32)), ("logw", 
 if IV is not None: add("iv_idx", IV[0]); add("iv", IV[1])
 open(os.path.join(outd, "maps.bin"), "wb").write(b"".join(parts))
 T = json.load(open(tests_json)); tests = {k: T[k] for k in ("paper", "paper_ci", "paper_per_contrast", "cell", "cell_won", "future", "cell_by_measure") if k in T}
-Dj = {"meta": {"model": "regression", "variant": VARIANT, "pen": PEN, "lam": lam, "contrasts": D, "papers": len({d["group"] for d in H["docs"].values()}), "peaks": int(sum(len(f) for f in C["foci"])),
+CN = json.load(open(os.path.join(os.path.dirname(corpus), "corpus_counts_multimodal_fam.json"))); tiers = collections.Counter(d.get("tier") for d in H["docs"].values())
+Dj = {"meta": {"corpus": {"with_additional": sum(any(i.startswith("x:all:") for i in d["ids"]) for d in H["docs"].values()), "shared": tiers["unsupported"] + tiers["none"],
+                          "meta_papers_dropped": CN.get("dropped: meta-analysis papers", 0), "meta_contrasts_dropped": CN.get("dropped: contrasts of meta-analysis papers", 0)},
+               "model": "regression", "variant": VARIANT, "pen": PEN, "lam": lam, "contrasts": D, "papers": len({d["group"] for d in H["docs"].values()}), "peaks": int(sum(len(f) for f in C["foci"])),
                "conditions_all": len(tot), "conditions_shown": len(keep), "min_contrasts": MIN_C, "measures": meas, "labels": LABEL, "family": FAMILY, "flip": sorted(K.FLIP),
                "wm_measures": WM, "gm_names": GN, "wm_names": WN, "wm_atlas": wm_atlas, "grid": {"shape": shape, "mm": 4},
                "layout": layout, "bumps": int(Phi.shape[1]), "blocks": blocks, "tests": tests, "strength_q": [float(np.quantile(st, q)) for q in (0.33, 0.67)]},

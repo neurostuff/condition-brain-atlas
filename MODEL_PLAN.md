@@ -65,3 +65,9 @@ Addition 5, intervals: KEPT (2026-11-14, night): papers resampled with replaceme
 The atlas page shows them (2026-11-14): 50 refits on all papers resampled, within-paper correlation 0.08; per cell and region the 80% interval of the share of predicted peaks and of that share relative to the comparison, and the predictive interval for one new paper's 10 peaks.
 
 Next: additions 4, 6, 7 and the ENIGMA comparison are untouched.
+
+Condition specificity (2026-11-15, NOTES.md): on psychiatric grey matter loss with one audited diagnosis per contrast, the diagnosis adds +0.001 per held-out peak beyond its class (p 0.11); only PTSD passes Holm and a model-free check does not confirm it. Review found three corpus problems to fix before the next atlas build: comorbidity lists counted as diagnoses, 81 meta-analysis papers, the `psychiatric_other` default class.
+
+Corpus rebuilt (2026-11-15, later; NOTES.md): contrasts count toward the primary diagnosis; other listed conditions are kept as
+"also present" labels outside the model (as labels of their own they add +0.0006 per held-out peak by paper, +0.0022 on held-out
+measures: below the rule); 194 meta-analysis papers dropped. Kept model on it: `fits/v2/prim`, intervals `fits/unc_v2`.

@@ -47,50 +47,63 @@ condition with at least MIN_LEAF contrasts in a direction AND measure family is 
 (FAMILY below): structure, diffusion, resting function, metabolism and perfusion, molecular, task, electrophysiology. A
 cell with little data falls back on the direction's pooled mixture, then on the condition's.
 
-usage: [STRUCTURE=nested|flat|measure_first|multimodal|multimodal_dir|multimodal_fam] [MIN_LEAF=5] python build_corpus.py CONTRASTS.jsonl CONDITION_STRINGS.json VOCABULARY.json OUT_DIR
-writes OUT_DIR/corpus_pc_<structure>.json, OUT_DIR/conditions.json, OUT_DIR/corpus_counts_<structure>.json
+Since 2026-11-15 (the label audit; primary.py):
+- LABELS=primary (default): a document's condition authors are its primary conditions only (primary.assign). Its other
+  listed conditions (comorbidities of some patients, symptoms, history) become "x:all:<condition>" authors, "also present":
+  no parents, so they take no part in a condition's own map; checks.py uses them only with --variant ...+also.
+  LABELS=all is the earlier corpus (every listed condition an equal author), kept for the comparison.
+- META (optional fifth argument, from paper_meta.py): contrasts of papers flagged as meta-analyses are dropped.
+- CLASS_FIX: conditions that the normalization left in its default class "psychiatric_other" and are not psychiatric. A
+  condition missing from the vocabulary now gets the class "unclassified". OUT_DIR/vocabulary.json is the corrected copy.
+
+usage: [STRUCTURE=nested|flat|measure_first|multimodal|multimodal_dir|multimodal_fam] [MIN_LEAF=5] [LABELS=primary|all] python build_corpus.py CONTRASTS.jsonl CONDITION_STRINGS.json VOCABULARY.json OUT_DIR [META.json]
+writes OUT_DIR/corpus_pc_<structure>.json, OUT_DIR/conditions.json, OUT_DIR/corpus_counts_<structure>.json, OUT_DIR/vocabulary.json
 """
 import collections, json, os, re, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from measures import LABEL, measure_group
+from primary import assign, key
 
 DIR = {"decrease": "dec", "increase": "inc"}
 FAMILY = {"grey matter": "structure", "cortical thickness": "structure", "white matter": "structure", "fa": "diffusion", "diffusivity": "diffusion",
           "alff": "resting function", "falff": "resting function", "reho": "resting function", "degree centrality": "resting function",
           "glucose metabolism": "metabolism and perfusion", "perfusion": "metabolism and perfusion", "molecular binding": "molecular",
           "task activation": "task", "eeg meg": "electrophysiology"}
-STRUCTURE = os.environ.get("STRUCTURE", "nested"); MIN_LEAF = int(os.environ.get("MIN_LEAF", "5")); MM = STRUCTURE.startswith("multimodal")
-
-
-def key(s):
-    return re.sub(r"\s+", " ", s.replace("’", "'").replace("–", "-").replace("—", "-").strip().lower())
+STRUCTURE = os.environ.get("STRUCTURE", "nested"); MIN_LEAF = int(os.environ.get("MIN_LEAF", "5")); MM = STRUCTURE.startswith("multimodal"); LABELS = os.environ.get("LABELS", "primary"); assert LABELS in ("primary", "all")
+CLASS_FIX = {"lyme disease": "infectious", "botulism": "infectious", "neurofibromatosis": "genetic_syndrome", "gaucher disease": "genetic_syndrome", "thalassemia": "systemic_medical", "optic neuropathy": "sensory_loss"}
 
 
 def main():
     cp, sp, vp, out = sys.argv[1], sys.argv[2], sys.argv[3], Path(sys.argv[4]); out.mkdir(parents=True, exist_ok=True)
     table = json.load(open(sp)); fin = {x["condition"]: x for x in json.load(open(vp))}
+    for c, cl in CLASS_FIX.items():
+        if c in fin: assert fin[c]["class"] == "psychiatric_other", (c, fin[c]["class"]); fin[c]["class"] = cl
+    json.dump(sorted(fin.values(), key=lambda x: x["condition"]), open(out / "vocabulary.json", "w"), ensure_ascii=False, indent=0)
+    meta = {p for p, v in json.load(open(sys.argv[5])).items() if v["meta"]} if len(sys.argv) > 5 else set(); dropped = set()
     fin.setdefault("unspecified condition", {"condition": "unspecified condition", "class": "not_a_condition", "parent": None})
     n = collections.Counter(); rows = []; unmapped = collections.Counter()
     for line in open(cp):
         r = json.loads(line); m, why = measure_group(r)
         if m is None:
             n[f"left out: {why}"] += 1; continue
-        conds = []
+        if r["paper"] in meta:
+            n["dropped: contrasts of meta-analysis papers"] += 1; dropped.add(r["paper"]); continue
         for g in r["patient_groups"]:
             for s in g["conditions"]:
-                fs = table.get(key(s))
-                if fs is None:
-                    unmapped[key(s)] += 1; continue
-                conds += [f for f in fs if f not in conds]
+                if table.get(key(s)) is None: unmapped[key(s)] += 1
+        conds, extra, tier = assign(r, table, fin)
+        if LABELS == "all": conds, extra = conds + extra, []
         if not conds:
             conds = ["unspecified condition"]; n["documents with no usable condition"] += 1
-        rows.append((r, m, "all" if MM else DIR[r["direction"]], conds))
-    leaf_n = collections.Counter((d, c, m) for _, m, d, cs in rows for c in cs)
-    dir_n = collections.Counter((r["direction"], c) for r, _, _, cs in rows for c in cs)
-    fam_n = collections.Counter((r["direction"], FAMILY[m], c) for r, m, _, cs in rows for c in cs)
-    docs, use, mu, papers = {}, collections.Counter(), collections.Counter(), collections.defaultdict(set); trees = set()
-    for r, m, d, conds in rows:
+        n[f"tier {tier}"] += 1; n["documents with additional conditions"] += bool(extra)
+        rows.append((r, m, "all" if MM else DIR[r["direction"]], conds, extra, tier))
+    n["dropped: meta-analysis papers"] = len(dropped)
+    leaf_n = collections.Counter((d, c, m) for _, m, d, cs, _, _ in rows for c in cs)
+    dir_n = collections.Counter((r["direction"], c) for r, _, _, cs, _, _ in rows for c in cs)
+    fam_n = collections.Counter((r["direction"], FAMILY[m], c) for r, m, _, cs, _, _ in rows for c in cs)
+    docs, use, mu, papers = {}, collections.Counter(), collections.Counter(), collections.defaultdict(set); trees = set(); also = collections.Counter()
+    for r, m, d, conds, extra, tier in rows:
         ids = []
         for c in conds:
             nested = STRUCTURE == "nested" and leaf_n[d, c, m] >= MIN_LEAF
@@ -102,20 +115,22 @@ def main():
             trees.add(f"{d}:{m}" if STRUCTURE == "measure_first" else d)
             use[d, c] += 1; mu[d, c, m] += 1; papers[d, c].add(r["paper"])
         restricted = (r["spatial_scope"] or "") != "whole_brain"
-        ids += ([] if MM else [f"m:measure:{m}"]) + (["m:scope:restricted"] if restricted else []) + ["background"]
-        docs[r["id"]] = {"ids": ids, "group": r["paper"], "effect": "contrast", "foci": r["foci"], "direction": r["direction"], "measure": m, "scope": r["spatial_scope"]}
+        ids += [f"x:all:{c}" for c in extra] + ([] if MM else [f"m:measure:{m}"]) + (["m:scope:restricted"] if restricted else []) + ["background"]
+        for c in extra: also[c] += 1
+        docs[r["id"]] = {"ids": ids, "group": r["paper"], "effect": "contrast", "foci": r["foci"], "direction": r["direction"], "measure": m, "scope": r["spatial_scope"], "tier": tier}
         n["documents"] += 1; n[f"documents {r['direction']}"] += 1; n[f"measure {m}"] += 1; n["restricted"] += restricted
         n["documents with several conditions"] += len(conds) > 1
     per = collections.Counter(x["group"] for x in docs.values())
     for x in docs.values(): x["weight"] = 1.0 / per[x["group"]]
     parents = {"background": [], "m:scope:restricted": []}; labels = {"background": "shared pattern", "m:scope:restricted": "region-restricted analysis"}
+    for c in also: parents[f"x:all:{c}"] = []; labels[f"x:all:{c}"] = f"{c} (also present)"
     for m in {x["measure"] for x in docs.values()} if not MM else ():
         parents[f"m:measure:{m}"] = []; labels[f"m:measure:{m}"] = LABEL[m]
 
     def add(d, c, seen=()):
         node = f"c:{d}:{c}"
         if node in parents: return node
-        info = fin.get(c) or {"parent": None, "class": "psychiatric_other"}; p = info.get("parent")
+        info = fin.get(c) or {"parent": None, "class": "unclassified"}; p = info.get("parent")
         if p and p != c and p not in seen and p in fin:
             parents[node] = [add(d, p, seen + (c,))]
         else:
@@ -147,9 +162,9 @@ def main():
          "structure": {"kind": STRUCTURE, "min_leaf": MIN_LEAF},
          "stats": {"contrasts": len(docs), "papers": len(per), "peaks": sum(len(x["foci"]) for x in docs.values()), "nodes": len(parents)}}
     json.dump(H, open(out / f"corpus_pc_{STRUCTURE}.json", "w"))
-    conds = {c for _, c in use}
+    conds = {c for _, c in use} | set(also)
     vocab = sorted(({"condition": c, "class": (fin.get(c) or {}).get("class"), "parent": (fin.get(c) or {}).get("parent"),
-                     "decrease": use.get(("dec", c), 0) + use.get(("all", c), 0), "increase": use.get(("inc", c), 0), "papers": len(papers.get(("dec", c), set()) | papers.get(("inc", c), set()) | papers.get(("all", c), set())),
+                     "also_present": also.get(c, 0), "decrease": use.get(("dec", c), 0) + use.get(("all", c), 0), "increase": use.get(("inc", c), 0), "papers": len(papers.get(("dec", c), set()) | papers.get(("inc", c), set()) | papers.get(("all", c), set())),
                      "by_measure": {m: [mu.get(("dec", c, m), 0), mu.get(("inc", c, m), 0)] for m in LABEL if mu.get(("dec", c, m), 0) + mu.get(("inc", c, m), 0)}}
                     for c in conds), key=lambda x: -(x["decrease"] + x["increase"]))
     json.dump(vocab, open(out / "conditions.json", "w"), indent=0, ensure_ascii=False)

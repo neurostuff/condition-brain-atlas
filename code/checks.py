@@ -15,6 +15,8 @@ additive: regularised additive regression on labels with a point-process likelih
     --pen any=..,class=..,cond=..,dir=..,fam=..,block=..,scope=..,factor=..   a ridge penalty per level (default LAM for all)
     --variant full+dirsplit   condition, broader condition, class and "any condition" labels are split by direction
     --variant full+meaning    direction recoded by meaning: more diffusivity counts with less of everything else
+    --variant full+also       the additional conditions of a contrast's patients (comorbidities; "x:all:<condition>" in the
+        corpus, build_corpus.py LABELS=primary) each get a label per direction, weight 1, on top of the primary diagnosis
     --variant full+couple --rank R   the condition | direction and condition | direction | family labels are replaced by
         R maps per condition, mixed into each of the 28 blocks by a learned loading matrix (columns scaled to mean square
         one half; the first two start as the less and more indicators, so R = 2 with --freeze-l is the nofam variant)
@@ -56,7 +58,7 @@ def features(C, H, blk, B, variant, names=None):
     contrast x condition weights of the labels that the learned factors replace"""
     nodes = C["nodes"]; par = C["parents"]; keys = {x: i for i, x in enumerate(nodes)}; rows, cols, vals = [], [], []; grp = {}
     for b in range(B): keys["block:%d" % b] = len(nodes) + b; grp[len(nodes) + b] = "block"
-    v0, *o = variant.split("+"); opts = set(o); assert opts <= {"dirsplit", "meaning", "couple"}, opts
+    v0, *o = variant.split("+"); opts = set(o); assert opts <= {"dirsplit", "meaning", "couple", "also"}, opts
     conds = {}; crow, ccol, cval = [], [], []
     def kid(k, g):
         if k not in keys: keys[k] = len(keys)
@@ -84,6 +86,7 @@ def features(C, H, blk, B, variant, names=None):
             for c in cs: cacc[conds.setdefault(c, len(conds))] += w
         for a in C["auth"][d]:
             if nodes[a] == "m:scope:restricted": acc[a] += 1.0; grp[a] = "scope"
+            if "also" in opts and nodes[a].startswith("x:"): acc[kid(nodes[a] + " | " + dr, "also")] += 1.0     # an additional condition of the patients, by direction
         acc[len(nodes) + int(blk[d])] += 1.0
         for i, v in acc.items(): rows.append(d); cols.append(i); vals.append(v)
         for i, v in cacc.items(): crow.append(d); ccol.append(i); cval.append(v)
@@ -239,7 +242,7 @@ def main():
         for r_, c_, v_ in zip(*FIT["couple"][:3]): rk[r_].append((1, c_, round(v_, 6)))
     gk = {}; FIT["gid"] = np.array([gk.setdefault(tuple(sorted(rk[d])), len(gk)) for d in range(D)]); print(len(gk), "distinct label rows", flush=True)
     FIT["pen"] = {k: float(v) for k, v in (x.split("=") for x in a.pen.split(",") if x)}; FIT["rank"] = a.rank; FIT["freeze_l"] = a.freeze_l; FIT["lseed"] = a.l_seed
-    assert set(FIT["pen"]) <= {"any", "class", "cond", "dir", "fam", "block", "scope", "factor"}, FIT["pen"]
+    assert set(FIT["pen"]) <= {"any", "class", "cond", "dir", "fam", "block", "scope", "factor", "also"}, FIT["pen"]
     if FIT["couple"]:
         cr, cc, cv, nc = FIT["couple"]; FIT["Xc"] = torch.zeros(D, nc); FIT["Xc"][torch.tensor(cr), torch.tensor(cc)] = torch.tensor(cv, dtype=torch.float32); assert a.rank > 0
     pidx = {g: i for i, g in enumerate(sorted({H["docs"][x]["group"] for x in C["ids"]}))}; pap = np.array([pidx[H["docs"][x]["group"]] for x in C["ids"]])
