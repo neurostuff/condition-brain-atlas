@@ -105,6 +105,7 @@ def fit_additive(C, blk, B, Phi, X, tr, lam, dev, steps=300, lr=0.03, chunk=int(
     w = P.windows(hist, [ms.index(x) for x in ms], (ijk, tuple(ijk.max(0) + 1)), 1.5, 0.02); logw = torch.tensor(np.log(w), dtype=torch.float32, device=dev)
     Phit = torch.tensor(Phi, device=dev); Xd = X.to(dev); A = torch.zeros(Xd.shape[1], Phi.shape[1], device=dev, requires_grad=True)
     pv_ = FIT.get("pen") or {}; penv = torch.tensor([pv_.get(g, lam) for g in FIT["groups"]], dtype=torch.float32, device=dev)[:, None] if "groups" in FIT else lam
+    A0 = torch.tensor(FIT["A0"], device=dev) if FIT.get("A0") is not None else 0.0     # shrinkage target (uncertainty.py draws it from the ridge prior); default zero
     params = [A]; Xc = FIT.get("Xc"); R = FIT.get("rank", 0) if Xc is not None else 0
     if R:
         # learned coupling: contrast j in block b gets sum_r Leff[b, r] * (sum_c Xc[j, c] Z[r, c]) on top of the fixed labels
@@ -138,7 +139,7 @@ def fit_additive(C, blk, B, Phi, X, tr, lam, dev, steps=300, lr=0.03, chunk=int(
         opt.zero_grad(); tot = 0.0
         for ds, pd_, pv, bb, _ in batches:
             lp = torch.log_softmax(logw[bb] + linear(ds, bb) @ Phit.T, 1)[pd_, pv].sum(); (-lp / npk).backward(); tot += float(lp.detach())
-        pen = (penv * A ** 2).sum() / npk + (lamz * (Z ** 2).sum() / npk if R else 0.0); pen.backward(); state["tot"] = tot
+        pen = (penv * (A - A0) ** 2).sum() / npk + (lamz * (Z ** 2).sum() / npk if R else 0.0); pen.backward(); state["tot"] = tot
         return torch.tensor(-tot / npk) + pen.detach()
     if FIT.get("opt", "lbfgs") == "lbfgs":
         opt = torch.optim.LBFGS(params, lr=1.0, max_iter=20, history_size=20, line_search_fn="strong_wolfe")

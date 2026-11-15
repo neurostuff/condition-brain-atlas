@@ -1,6 +1,6 @@
 """Data for the condition atlas page (hypothesis-finding version) from the additive regression kept after MODEL_PLAN.md:
 labels split by direction, direction by meaning, family-level penalty 5, window from peaks counted once.
-usage: export_site_hyp.py CORPUS VOCABULARY.json OUT_DIR JHU.nii.gz JHU.xml TESTS.json CELL_SCORES.npy
+usage: export_site_hyp.py CORPUS VOCABULARY.json OUT_DIR JHU.nii.gz JHU.xml TESTS.json CELL_SCORES.npy [BOOT_coef.npz RHO.json COVERAGE.json]
 
 Fits checks.py's regression on all contrasts and writes OUT_DIR/data.json and OUT_DIR/maps.bin. A cell's map is computed in
 the page: P(v) = softmax_v(log window[measure, v] + Phi[v] . (A[block] + sum of A over the cell's labels)); the labels of
@@ -11,6 +11,14 @@ Per condition and cell (measure x reported direction): contrasts; share of predi
 measure's usual pattern and relative to the class's (total variation distance); the three regions gaining most.
 "transfer": for cells held out in the held-out-measure test, gain per peak when the measure was predicted from the rest.
 "pairs": conditions of different classes whose condition-specific maps (structure, less) correlate most.
+Intervals (with BOOT_coef.npz from uncertainty.py fit --test all --save-coef, RHO.json from uncertainty.py score on that fit,
+COVERAGE.json from unc_report.py): for each cell and up to 16 regions (the 8 gaining most against the measure's usual pattern
+and the 8 gaining most against the class), from the fits on resampled papers: the 10th and 90th percentile of the region's
+share of predicted peaks, of that share relative to the measure's usual share and relative to the class's (each as a
+percentage of the estimate), and the 80% predictive interval for how many of one new paper's 10 peaks fall in the region
+(beta-binomial with the within-paper correlation of RHO.json, mixed over the fits). maps.bin: "iv_idx" (cells x 16, region
+index, 255 = none; cell = (condition * measures + measure) * 2 + direction), "iv" (cells x 16 x 7: share low, high; relative
+to measure low, high; relative to class low, high; predictive low * 16 + high).
 """
 import collections, json, os, re, sys
 from pathlib import Path
@@ -109,6 +117,56 @@ for c in cons:
             p = soft(logw[b] + (blkc + A[ids].sum(0)) @ PhiT); pc = soft(logw[b] + (blkc + A[c["cls"][md]].sum(0)) @ PhiT); pb = pbase[m, dn]
             pair.append([c["measures"].get(m, [0, 0])[k], round(float(0.5 * np.abs(p - pb).sum()), 3), round(float(0.5 * np.abs(p - pc).sum()), 3)] + regions(p, pb, m))
         c["cells"].append(pair)
+# intervals: every cell's share per region in every fit on resampled papers
+IV = None
+if len(sys.argv) > 10:
+    Zc = np.load(sys.argv[8]); Ad, Ld = Zc["A"], Zc["logw"]; nd = len(Ad) - 1; rho = float(json.load(open(sys.argv[9]))["rho"]); dev = torch.device("cuda:0"); NP, KR = 10, 16
+    print("intervals:", nd, "draws; largest difference between draw 0 and this fit", float(np.abs(Ad[0].astype(np.float32) - A).max()), "rho", rho, flush=True)
+    RM = max(len(GN), len(WN)); oh = lambda lab: torch.zeros(V, RM, device=dev).scatter_(1, torch.tensor(lab.astype(np.int64), device=dev)[:, None], 1.0)
+    Rg_, Rw_ = oh(glab), oh(wlab); Phit = torch.tensor(Phi, dtype=torch.float32, device=dev)
+    full, clso, cb, cwm = [], [], [], []
+    for c in cons:
+        for m in meas:
+            for dn in ("less", "more"):
+                b = bix[f"{m} | {'decrease' if dn == 'less' else 'increase'}"]; md = mdir(m, dn); f = c["fam"][md].get(FAMILY[m])
+                full.append([len(nodes) + b] + c["base"][md] + c["cls"][md] + ([f] if f is not None else [])); clso.append([len(nodes) + b] + c["cls"][md]); cb.append(b); cwm.append(m in WM)
+    NC = len(full); cb = np.array(cb); cwm = np.array(cwm)
+    def sp(lists): r = np.repeat(np.arange(len(lists)), [len(x) for x in lists]); k = np.concatenate(lists); return torch.sparse_coo_tensor(np.stack([r, k]), np.ones(len(r), np.float32), (len(lists), A.shape[0])).coalesce().to(dev)
+    Mf, Mc, Mb = sp(full), sp(clso), sp([[len(nodes) + b] for b in range(B)]); wmt = torch.tensor(cwm, device=dev)[:, None]; bwm = torch.tensor([n_.split(" | ")[0] in WM for n_ in names], device=dev)[:, None]
+    SF = np.zeros((nd + 1, NC, RM), np.float32); SC = np.zeros_like(SF); SB = np.zeros((nd + 1, B, RM), np.float32)
+    def shares(M, bb, wm_, At, Lw):
+        co = torch.sparse.mm(M, At); out = []
+        for k in range(0, len(bb), 1500):
+            p = torch.softmax(Lw[bb[k:k + 1500]] + co[k:k + 1500] @ Phit.T, 1); out.append(torch.where(wm_[k:k + 1500], p @ Rw_, p @ Rg_))
+        return torch.cat(out).cpu().numpy()
+    with torch.no_grad():
+        for d in range(nd + 1):
+            At = torch.tensor(Ad[d].astype(np.float32), device=dev); Lw = torch.tensor(Ld[d].astype(np.float32), device=dev); bt = torch.tensor(cb, device=dev)
+            SF[d] = shares(Mf, bt, wmt, At, Lw); SC[d] = shares(Mc, bt, wmt, At, Lw); SB[d] = shares(Mb, torch.arange(B, device=dev), bwm, At, Lw)
+    okg = np.array([x not in SKIP and x != "White matter" for x in GN] + [False] * (RM - len(GN))); okw = np.array([x not in SKIP for x in WN] + [False] * (RM - len(WN)))
+    ok = np.where(cwm[:, None], okw[None], okg[None]); est, pc0, pb0 = SF[0], SC[0], SB[0][cb]; eps = 1e-9
+    def top(extra): extra = np.where(ok & (extra > 0), extra, -1.0); o = np.argsort(-extra, 1)[:, :KR // 2]; return np.where(np.take_along_axis(extra, o, 1) > 0, o, 255)
+    idx = np.full((NC, KR), 255, np.int64)
+    for n_, (a_, b_) in enumerate(zip(top(est - pb0), top(est - pc0))): u = [int(x) for x in dict.fromkeys(list(a_) + list(b_)) if x != 255]; idx[n_, :len(u)] = u
+    has = idx != 255; ii = np.where(has, idx, 0); take = lambda X: np.take_along_axis(X, ii[None].repeat(len(X), 0) if X.ndim == 3 else ii, -1)
+    f_, c_, b_ = take(SF), take(SC), take(SB[:, cb])                                  # draws x cells x KR
+    def pct(x, x0): q = np.quantile(x[1:], [0.1, 0.9], axis=0) / np.maximum(x0, eps); return np.clip(np.rint(100 * q), 0, 255).astype(np.uint8)
+    q_share = pct(f_, f_[0]); q_m = pct(f_ / np.maximum(b_, eps), f_[0] / np.maximum(b_[0], eps)); q_c = pct(f_ / np.maximum(c_, eps), f_[0] / np.maximum(c_[0], eps))
+    # predictive: of NP peaks from one new paper, the count in the region; beta-binomial mixed over the draws
+    y = torch.arange(NP + 1, dtype=torch.float64, device=dev); kk = (1 - rho) / rho; lb = lambda a_, b_: torch.lgamma(a_) + torch.lgamma(b_) - torch.lgamma(a_ + b_); plo, phi_ = [], []
+    for k in range(0, NC, 1000):
+        pi = torch.tensor(f_[1:, k:k + 1000], dtype=torch.float64, device=dev).clamp(1e-7, 1 - 1e-7)[..., None]
+        lpm = torch.lgamma(torch.tensor(NP + 1.0, device=dev)) - torch.lgamma(y + 1) - torch.lgamma(NP - y + 1) + lb(y + pi * kk, NP - y + (1 - pi) * kk) - lb(pi * kk, (1 - pi) * kk)
+        cdf = torch.exp(lpm).mean(0).cumsum(-1); plo.append((cdf < 0.1).sum(-1).clamp(max=NP).cpu().numpy()); phi_.append((cdf < 0.9).sum(-1).clamp(max=NP).cpu().numpy())
+    plo, phi_ = np.concatenate(plo), np.concatenate(phi_)
+    iv = np.stack([q_share[0], q_share[1], q_m[0], q_m[1], q_c[0], q_c[1], (plo * 16 + phi_).astype(np.uint8)], -1); iv[~has] = 0
+    IV = (np.where(has, idx, 255).astype(np.uint8), iv)
+    t1 = has[:, 0]; rel = (q_share[1][:, 0][t1].astype(float) - q_share[0][:, 0][t1]) / 200
+    print(f"intervals: {NC} cells, {int(has.sum())} cell-regions; first region: half-width of the share interval median {np.median(rel):.3f} of the estimate; "
+          f"estimate outside its interval in {float(((q_share[0] > 100) | (q_share[1] < 100))[has].mean()):.3f}; high bound clipped at 2.55x in {float((q_share[1] == 255)[has].mean()):.4f}; "
+          f"relative to the measure: interval above 1 in {float((q_m[0][:, 0][t1] * (f_[0] / np.maximum(b_[0], eps))[:, 0][t1] > 100).mean()):.3f} of first regions", flush=True)
+    R_ = json.load(open(sys.argv[10])); cvr = lambda k: {"independent80": R_[k]["binomial"]["expecting >= 1"]["80"], **{q: R_[k]["with paper correlation"]["expecting >= 1"][q] for q in ("50", "80", "95", "n")}}
+    IVMETA = {"draws": nd, "level": 80, "rho": rho, "peaks": NP, "k": KR, "coverage": {"paper": cvr("paper boot"), "cell": cvr("cell boot")}}
 # held-out-measure test, by cell (the same cells as checks.py --tests cell --seed 100)
 base_ = lambda i: nodes[i].split(" | ")[0]; isc = lambda i: nodes[i].startswith("c:all:") and not is_cls(nodes[i])
 dc = [sorted({base_(i) for i in C["auth"][d] if isc(i)}) for d in range(D)]; dmeas = [H["docs"][x]["measure"] for x in C["ids"]]
@@ -143,6 +201,7 @@ def add(name, arr):
     b = np.ascontiguousarray(arr).tobytes(); layout[name] = [off[0], str(arr.dtype), list(arr.shape)]; parts.append(b); off[0] += len(b)
 for nm_, arr in (("phi_ptr", ptr), ("a_scale", sc.astype(np.float32)), ("logw", mw), ("phi_idx", nzc.astype(np.uint16)), ("phi_val", np.rint(Phi[nzr, nzc] * 255).astype(np.uint8)),
                  ("ijk", ijk), ("gm", glab), ("wm", wlab), ("a", Aq)): add(nm_, arr)
+if IV is not None: add("iv_idx", IV[0]); add("iv", IV[1])
 open(os.path.join(outd, "maps.bin"), "wb").write(b"".join(parts))
 T = json.load(open(tests_json)); tests = {k: T[k] for k in ("paper", "paper_ci", "paper_per_contrast", "cell", "cell_won", "future", "cell_by_measure") if k in T}
 Dj = {"meta": {"model": "regression", "variant": VARIANT, "pen": PEN, "lam": lam, "contrasts": D, "papers": len({d["group"] for d in H["docs"].values()}), "peaks": int(sum(len(f) for f in C["foci"])),
@@ -150,6 +209,7 @@ Dj = {"meta": {"model": "regression", "variant": VARIANT, "pen": PEN, "lam": lam
                "wm_measures": WM, "gm_names": GN, "wm_names": WN, "wm_atlas": wm_atlas, "grid": {"shape": shape, "mm": 4},
                "layout": layout, "bumps": int(Phi.shape[1]), "blocks": blocks, "tests": tests, "strength_q": [float(np.quantile(st, q)) for q in (0.33, 0.67)]},
       "conditions": cons, "classes": classes, "pairs": pairs}
+if IV is not None: Dj["meta"]["intervals"] = IVMETA; Dj["meta"]["layout"] = layout
 json.dump(Dj, open(os.path.join(outd, "data.json"), "w"), separators=(",", ":"))
 print(len(keep), "conditions,", len(classes), "classes,", len(order), "labels; data.json", round(os.path.getsize(os.path.join(outd, "data.json")) / 1e6, 2), "MB; maps.bin", round(off[0] / 1e6, 2), "MB")
 nm_of = lambda m, k: (WN if m in WM and WN is not None else GN)[k]

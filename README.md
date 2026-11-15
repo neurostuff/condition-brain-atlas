@@ -39,13 +39,28 @@ The gains are real and small, and most of the gain comes from a condition's broa
 to the model were tested on held-out data and which were kept (a lighter penalty on family-level labels, direction by
 meaning for diffusivity, labels split by direction) or dropped (a learned coupling between measures).
 
+## How uncertain it is
+
+The model is refitted 50 times on papers resampled with replacement. The website shows, for each region of a cell, the
+80% interval of its share of predicted peaks over those refits. A single new study varies more, because peaks from one
+paper cluster (within-paper correlation about 0.1), and the interval for a study's peak count in a region includes that.
+That interval was tested on held-out contrasts, for regions expected to hold at least one peak:
+
+| Held out | 80% interval, peaks treated as independent | 50% interval | 80% interval | 95% interval |
+|---|---|---|---|---|
+| A fifth of the papers (5 folds) | 62% | 48% | 82% | 97% |
+| One whole measure for a condition | 64% | 49% | 82% | 95% |
+
+The intervals of the expected pattern itself cannot be tested this way, and they leave out the bias from the penalty.
+
 ## Layout
 
 | Path | What |
 |---|---|
 | `code/checks.py` | the regression (`additive`): fit, held-out tests by paper, by held-out measure and by year; options for every tested addition |
 | `code/compare_scores.py` | paired comparison of two runs with a bootstrap over papers |
-| `code/export_site_hyp.py` | fits the kept model on all contrasts and writes the website's data |
+| `code/uncertainty.py`, `unc_report.py` | refits on resampled papers; coverage of the intervals on held-out contrasts |
+| `code/export_site_hyp.py` | fits the kept model on all contrasts and writes the website's data, with intervals when given the refits |
 | `code/build_contrasts.py`, `measures.py`, `merge_normalization.py`, `build_corpus.py` | building the corpus from extracted papers |
 | `code/pc_model.py` and the report scripts | an earlier author-topic model of the same data, kept for comparison (it predicted about half as well) |
 | `code/*.sh` | job wrappers as run on our GPU server; paths are specific to it |
@@ -65,6 +80,8 @@ python code/checks.py additive corpus.json out.json --window-from foci --lam 20 
 python code/export_site_hyp.py corpus.json vocabulary.json docs JHU-ICBM-labels-2mm.nii.gz JHU-labels.xml out.json out_cell.npy
 ```
 
+For the intervals, `code/uncertainty.py` (`fit` and `score`; see its docstring) and `code/site_job.sh` for the order of the steps.
+
 Needs Python 3.12, PyTorch with a GPU (about 3 GB of memory), NumPy, nibabel and nilearn's Harvard-Oxford atlas files.
 
 ## What the website publishes
@@ -74,5 +91,6 @@ coordinates of individual studies.
 
 ## Limits
 
-No uncertainty intervals yet. Peaks say where a difference was reported, not how large it was. The model learns from
+The intervals cover resampling of papers and clustering within a paper, not errors in reading the papers or the choice
+of model. Peaks say where a difference was reported, not how large it was. The model learns from
 what was published, including where researchers chose to look.

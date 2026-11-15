@@ -96,11 +96,17 @@ td .where { color: var(--muted); font-size: 13px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); margin: 0 0 4px; }
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .regions { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; max-width: 760px; }
-.regions li { display: grid; grid-template-columns: minmax(150px, 280px) 1fr 3.2em 6.5em; gap: 10px; align-items: center; font-size: 14px; }
-.regions .rbar { height: 9px; background: var(--line); border-radius: 2px; overflow: hidden; min-width: 0; }
+.regions li { display: grid; grid-template-columns: minmax(150px, 260px) 1fr auto auto; gap: 10px; align-items: center; font-size: 14px; }
+.regions li.head { font-size: 12px; color: var(--muted); align-items: end; }
+.regions li.head span:nth-child(n+3) { text-align: right; }
+.regions .rbar { height: 9px; background: var(--line); border-radius: 2px; overflow: hidden; min-width: 0; position: relative; }
+.regions .rbar b { position: absolute; top: 3px; height: 3px; background: var(--ink); border-radius: 1px; }
 .regions .rbar i { display: block; height: 100%; background: var(--bar); }
-.regions .rv, .regions .rl { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
-@media (max-width: 640px) { .views { grid-template-columns: 1fr 1fr; } .views figure:first-child { grid-column: 1 / -1; } .regions li { grid-template-columns: 1fr 3.2em 6.5em; } .regions .rbar { display: none; } }
+.regions .rv, .regions .rl { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; min-width: 3.2em; }
+.regions .rv em, .regions .rl em { font-style: normal; opacity: 0.8; }
+.regions .rl.solid { color: var(--ink); }
+.pred { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+@media (max-width: 640px) { .views { grid-template-columns: 1fr 1fr; } .views figure:first-child { grid-column: 1 / -1; } .regions li { grid-template-columns: 1fr auto auto; gap: 8px; } .regions .rbar, .regions li.head span:nth-child(2) { display: none; } .regions .rv em, .regions .rl em { display: block; } }
 .near { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 0; margin: 0; list-style: none; }
 .near a { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; text-decoration: none; color: var(--ink); background: var(--panel); font-size: 14px; }
 .near a span { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-left: 6px; }
@@ -171,6 +177,7 @@ td .where { color: var(--muted); font-size: 13px; }
     function arr(n, C) { var x = L[n]; return new C(buf, x[0], x[2].reduce(function (p, q) { return p * q; }, 1)); }
     G = {ptr: arr('phi_ptr', Uint32Array), idx: arr('phi_idx', Uint16Array), val: arr('phi_val', Uint8Array), a: arr('a', Int8Array), as: arr('a_scale', Float32Array),
          logw: arr('logw', Float32Array), ijk: arr('ijk', Uint8Array), gm: arr('gm', Uint8Array), wm: arr('wm', Uint8Array), V: L.gm[2][0], R: D.meta.bumps, shape: D.meta.grid.shape};
+    if (L.iv && D.meta.intervals) { G.ivi = arr('iv_idx', Uint8Array); G.iv = arr('iv', Uint8Array); }
   }
   function field(ids) {      // log-intensity over voxels added by these labels
     var R = G.R, V = G.V, co = new Float32Array(R), i, r, v, out = new Float32Array(V);
@@ -207,7 +214,7 @@ td .where { color: var(--muted); font-size: 13px; }
     var lb = useWM ? G.wm : G.gm, names = useWM ? D.meta.wm_names : D.meta.gm_names, n = names.length, sum = new Float64Array(n), bs = new Float64Array(n), v;
     for (v = 0; v < G.V; v++) { sum[lb[v]] += p[v]; bs[lb[v]] += base[v]; }
     var out = [];
-    for (var i = 0; i < n; i++) { if (names[i] === 'Unlabeled' || names[i] === 'White matter, no tract label' || (!wmMeasure && names[i] === 'White matter')) continue; out.push({name: names[i], share: sum[i], extra: sum[i] - bs[i], lift: sum[i] / Math.max(bs[i], 1e-9)}); }
+    for (var i = 0; i < n; i++) { if (names[i] === 'Unlabeled' || names[i] === 'White matter, no tract label' || (!wmMeasure && names[i] === 'White matter')) continue; out.push({k: i, name: names[i], share: sum[i], extra: sum[i] - bs[i], lift: sum[i] / Math.max(bs[i], 1e-9)}); }
     out.sort(function (x, y) { return y.extra - x.extra; });
     return {list: out.filter(function (r) { return r.extra > 0; }).slice(0, 5), atlas: useWM ? D.meta.wm_atlas : 'gm'};
   }
@@ -228,7 +235,7 @@ td .where { color: var(--muted); font-size: 13px; }
         '<div class="views">' + VIEWS.map(function (w) { return '<figure><canvas role="img"></canvas><figcaption>' + w.cap + '</figcaption></figure>'; }).join('') + '</div>' +
         '<div class="scale"><span>Weaker</span><i></i><span>Stronger. Coloured: where peaks are more likely than the comparison, at 35% or more of this map’s largest excess. Grey: the rest of the brain.</span></div>' +
         (c ? '<div class="built"><h3>What this prediction is built from</h3><div class="stack" role="img"></div><p class="legend"></p></div>' : '') +
-        '<h3>Top regions</h3><p class="sub small" style="margin:0">Ranked by how much more of the predicted peaks fall in each region than under the comparison. Shown: the region’s share of predicted peaks, and that share relative to the comparison.</p><ol class="regions"></ol><p class="sub small atlas" style="margin-top:6px"></p>';
+        '<h3>Top regions</h3><p class="sub small" style="margin:0">Ranked by how much more of the predicted peaks fall in each region than under the comparison. Shown: the region’s share of predicted peaks, and that share relative to the comparison.<span class="ivnote"></span></p><ol class="regions"></ol><p class="pred"></p><p class="sub small atlas" style="margin-top:6px"></p>';
       var sel = el.querySelector('#' + sid), bsel = el.querySelector('#' + bid), dir = 'less';
       function setDir(d) { dir = d; Array.prototype.forEach.call(el.querySelectorAll('.seg button'), function (x) { x.setAttribute('aria-pressed', String(x.getAttribute('data-d') === d)); }); }
       function render() {
@@ -256,8 +263,21 @@ td .where { color: var(--muted); font-size: 13px; }
         var pm = prob(ids, j), pb = prob(bids, j), vals = new Float32Array(G.V), mx = 0;
         for (var q = 0; q < G.V; q++) { var dlt = pm[q] - pb[q]; if (dlt > 0) { vals[q] = dlt; if (dlt > mx) mx = dlt; } }
         Array.prototype.forEach.call(el.querySelectorAll('canvas'), function (cv, wv) { drawView(cv, vals, mx || 1, VIEWS[wv].a, VIEWS[wv].b); cv.setAttribute('aria-label', lab(m) + ', ' + VIEWS[wv].cap); });
-        var Rg = topRegions(pm, pb, j), top = Rg.list.length ? Rg.list[0].share : 1;
-        el.querySelector('.regions').innerHTML = Rg.list.length ? Rg.list.map(function (r) { return '<li><span>' + esc(r.name) + '</span><span class="rbar"><i style="width:' + (100 * r.share / top).toFixed(0) + '%"></i></span><span class="rv">' + (100 * r.share).toFixed(1) + '%</span><span class="rl">' + r.lift.toFixed(2) + '×</span></li>'; }).join('') : '<li><span class="sub">No region stands out from the comparison.</span></li>';
+        var Rg = topRegions(pm, pb, j), IVM = D.meta.intervals, iv = {}, top = 0, pred = '';
+        if (c && G.iv) {      // intervals from refits on resampled papers, stored for the regions most likely to be listed
+          var K = IVM.k, o = ((i * D.meta.measures.length + j) * 2 + (dir === 'less' ? 0 : 1)) * K, cl = bsel.value === 'class' ? 4 : 2;
+          for (var e = 0; e < K; e++) { var kk = G.ivi[o + e], w7 = (o + e) * 7; if (kk !== 255) iv[kk] = {slo: G.iv[w7] / 100, shi: G.iv[w7 + 1] / 100, llo: G.iv[w7 + cl] / 100, lhi: G.iv[w7 + cl + 1] / 100, plo: G.iv[w7 + 6] >> 4, phi: G.iv[w7 + 6] & 15}; }
+        }
+        Rg.list.forEach(function (r) { r.iv = iv[r.k]; top = Math.max(top, r.share * (r.iv ? Math.max(1, r.iv.shi) : 1)); });
+        function rng(a, b, k) { return ' <em>(' + a.toFixed(k) + ' to ' + b.toFixed(k) + ')</em>'; }
+        el.querySelector('.regions').innerHTML = Rg.list.length ? (c && G.iv ? '<li class="head"><span>Region</span><span></span><span>Share of peaks</span><span>Relative to comparison</span></li>' : '') + Rg.list.map(function (r) { var v = r.iv;
+          return '<li><span>' + esc(r.name) + '</span><span class="rbar"><i style="width:' + (100 * r.share / top).toFixed(1) + '%"></i>' + (v ? '<b style="left:' + (100 * r.share * v.slo / top).toFixed(1) + '%;width:' + Math.max(0.5, 100 * r.share * (v.shi - v.slo) / top).toFixed(1) + '%"></b>' : '') + '</span>' +
+            '<span class="rv">' + (100 * r.share).toFixed(1) + '%' + (v ? rng(100 * r.share * v.slo, 100 * r.share * v.shi, 1) : '') + '</span>' +
+            '<span class="rl' + (v && r.lift * v.llo > 1 ? ' solid' : '') + '">' + r.lift.toFixed(2) + '×' + (v ? rng(r.lift * v.llo, r.lift * v.lhi, 2) : '') + '</span></li>'; }).join('') : '<li><span class="sub">No region stands out from the comparison.</span></li>';
+        var r0 = Rg.list[0];
+        if (r0 && r0.iv) pred = 'If one new study reported ' + IVM.peaks + ' peaks, ' + (r0.iv.plo === r0.iv.phi ? r0.iv.plo : r0.iv.plo + ' to ' + r0.iv.phi) + ' of them would be expected in the first region (' + IVM.level + '% interval). A single study varies far more than the expected share, because peaks from one paper cluster. <a href="#about">How the intervals were tested</a>.';
+        el.querySelector('.pred').innerHTML = pred;
+        el.querySelector('.ivnote').textContent = c && G.iv ? ' In brackets: ' + IVM.level + '% intervals from refitting the model ' + IVM.draws + ' times on resampled papers. A relative share in dark type stays above 1 across its interval.' : '';
         el.querySelector('.atlas').textContent = Rg.atlas === 'gm' ? 'Regions from the Harvard-Oxford atlas (cortical and subcortical). It does not cover the cerebellum, which is assigned by position.' : 'Regions from the ' + Rg.atlas + '.';
       }
       sel.addEventListener('change', render); if (bsel) bsel.addEventListener('change', render);
@@ -410,6 +430,14 @@ td .where { color: var(--muted); font-size: 13px; }
       '<h2>Brain pattern</h2>' + viewerHTML('k', i) + '<h2>Largest conditions</h2><ul class="near">' + k.top.map(function (j) { return '<li><a href="#c-' + j + '">' + cname(j) + '<span>' + D.conditions[j].contrasts + '</span></a></li>'; }).join('') + '</ul><a class="back" href="#classes">← All classes</a>';
   }
 
+  function ivAbout(v) {
+    function pc(x) { return Math.round(100 * x) + '%'; }
+    function row(name, q) { return '<tr><td>' + name + '</td><td class="num">' + pc(q.independent80) + '</td><td class="num">' + pc(q['50']) + '</td><td class="num">' + pc(q['80']) + '</td><td class="num">' + pc(q['95']) + '</td><td class="num">' + q.n.toLocaleString() + '</td></tr>'; }
+    return '<h2>How uncertain is a map?</h2><p>The model was refitted ' + v.draws + ' times, each time on papers drawn at random with replacement, so that everything one paper reports moves together. The brackets beside a region give the range that holds ' + v.level + '% of those refits. They describe how well the expected pattern is pinned down. They do not include the pull of the penalty toward the parent conditions and the class, so an untested cell that truly departs from its relatives can fall outside them.</p>' +
+      '<p>A single study varies much more than the expected pattern, because peaks from one paper cluster: ten peaks from one paper carry about as much information as ' + Math.round(10 / (1 + 9 * v.rho)) + ' independent ones (within-paper correlation ' + v.rho + '). The interval for a new study’s peak count includes this, and it is the one that can be tested. The table shows how often the interval held the observed count for withheld contrasts, for regions expected to hold at least one peak.</p>' +
+      '<div class="scroll" style="max-width:760px"><table><thead><tr><th>Withheld</th><th class="num" title="Coverage of the 80% interval when peaks are treated as independent">80% interval, peaks independent</th><th class="num">50% interval</th><th class="num">80% interval</th><th class="num">95% interval</th><th class="num">Region counts</th></tr></thead><tbody>' +
+      row('A fifth of the papers', v.coverage.paper) + row('One whole measure for a condition', v.coverage.cell) + '</tbody></table></div>';
+  }
   function viewAbout() {
     var m = D.meta, t = m.tests || {}, f = t.future || {}, bm = t.cell_by_measure || {};
     function row(name, v, extra) { return '<tr><td>' + name + '</td><td class="num">' + (v == null ? '' : sg(v)) + '</td><td class="sub">' + (extra || '') + '</td></tr>'; }
@@ -422,10 +450,11 @@ td .where { color: var(--muted); font-size: 13px; }
       '<div class="scroll"><table><thead><tr><th>Withheld</th><th class="num">Gain</th><th></th></tr></thead><tbody>' +
       row('A fifth of the papers', t.paper, t.paper_ci ? '95% interval ' + sg(t.paper_ci[0]) + ' to ' + sg(t.paper_ci[1]) + ', from resampling papers' : '') + row('One whole measure for a well-studied condition', t.cell, 'The model won in ' + Math.round(100 * (t.cell_won || 0)) + '% of cases') + row('Papers from 2020 on, fitted to earlier papers', f.all) +
       row('… of those, a combination seen five or more times before', f['cell seen 5+ times']) + row('… of those, a measure new for a known condition', f['condition seen, measure new'], 'The hardest case, and the one “Untested predictions” relies on') + row('… of those, a condition not seen before', f['condition unseen']) + '</tbody></table></div>' +
+      (m.intervals ? ivAbout(m.intervals) : '') +
       '<h2>Track record by measure</h2><p>Gain per peak when the measure was withheld for a condition and predicted from the rest. Predictions for diffusion and metabolism have worked best; task activation and EEG or MEG sources have barely worked.</p>' +
       '<div class="scroll" style="max-width:520px"><table><thead><tr><th>Measure withheld</th><th class="num">Gain</th><th class="num">Peaks</th></tr></thead><tbody>' + tr + '</tbody></table></div>' +
       '<h2>What was tried and dropped</h2><p>Each addition to the model had to improve predictions on withheld papers. A separate penalty for the family-level labels and counting diffusivity by its meaning passed. A learned matrix linking every measure to every other did not: it predicted worse than the fixed families at every size tried. An earlier version built on shared networks predicted about half as well.</p>' +
-      '<h2>Limits</h2><p>The maps are single best estimates with no uncertainty intervals. The gains are small: knowing the condition adds well under half of what knowing the measure adds, and most of it comes from the broad class. Peaks say where a difference was reported, not how large it was. The model learns from what was published, including where researchers chose to look. Conditions, measures and directions were read from papers by language models and are not individually checked.</p>';
+      '<h2>Limits</h2><p>The intervals cover resampling of papers and clustering within a paper; they do not cover errors in reading the papers or the choice of model. The gains are small: knowing the condition adds well under half of what knowing the measure adds, and most of it comes from the broad class. Peaks say where a difference was reported, not how large it was. The model learns from what was published, including where researchers chose to look. Conditions, measures and directions were read from papers by language models and are not individually checked.</p>';
   }
 
   function route() {

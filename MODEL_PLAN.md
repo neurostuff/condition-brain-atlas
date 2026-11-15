@@ -59,3 +59,9 @@ Baseline questions answered; additions 1 to 3 tested (numbers in NOTES.md, same 
 | 3 | Learned coupling DROPPED: worse than fixed family labels on every test at every rank and penalty tried; loadings collapse onto the direction indicators |
 
 Kept model: `--window-from foci --lam 20 --pen fam=5 --variant full+dirsplit+meaning`. The split by direction was adopted afterwards for map interpretation ("more grey matter" no longer inherits a condition's "less" pattern); it scores the same as the unsplit model on all three tests. Next by the stopping rule: addition 5 (intervals).
+
+Addition 5, intervals: KEPT (2026-11-14, night): papers resampled with replacement (50 refits) plus a within-paper correlation of 0.08 to 0.12 set on training papers. 80% predictive intervals for region peak counts cover 0.82 on held-out papers and 0.82 on held-out measures (95%: 0.95 to 0.97); binomial counts alone cover 0.62. The version with a draw from the ridge prior covers the same and was dropped.
+
+The atlas page shows them (2026-11-14): 50 refits on all papers resampled, within-paper correlation 0.08; per cell and region the 80% interval of the share of predicted peaks and of that share relative to the comparison, and the predictive interval for one new paper's 10 peaks.
+
+Next: additions 4, 6, 7 and the ENIGMA comparison are untouched.
