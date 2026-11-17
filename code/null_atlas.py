@@ -12,6 +12,7 @@ modes:
 A contrast keeps its measure, direction, peaks and measure family; only which condition it belongs to changes. Label
 nodes that the new combination needs (condition | direction | family) are added to the hierarchy.
 env PW_WIDTH=<mm> [PW_MIRROR=1]: fit with distance-weighted peaks (checks.py --peak-width).
+env SAVE_COEF=1: also save the coefficients and every cell's label rows, for null_peak.py.
 usage: null_atlas.py CORPUS VOCABULARY.json OUT_DIR MODE SEED [SEED ...]   (writes OUT_DIR/<mode>_<seed>.json)"""
 import collections, json, sys
 from pathlib import Path
@@ -21,6 +22,7 @@ import checks as K, pc_model as P
 from task_networks.corpus import load_corpus
 from build_corpus import FAMILY
 import os
+SAVE = os.environ.get("SAVE_COEF", "0") == "1"      # also write <tag>_coef.npz and <tag>_cells.json (each cell's label rows)
 PW = float(os.environ.get("PW_WIDTH", "0")); PW_MIRROR = os.environ.get("PW_MIRROR", "0") == "1"     # optional: fit with distance-weighted peaks
 corpus, vocab, outd, mode = sys.argv[1:5]; seeds = [int(x) for x in sys.argv[5:]]; Path(outd).mkdir(parents=True, exist_ok=True)
 H0 = json.load(open(corpus)); C0 = load_corpus(corpus); blk, names = P.blocks_of(H0, C0, "measure_dir"); B = len(names); bix = {b: i for i, b in enumerate(names)}
@@ -79,7 +81,7 @@ def one(H, tag):
             if j not in out: out.append(j); st += par[j]
         return out
     isc = lambda x: x[6:].startswith(("class ", "any condition")); split = lambda js, dn: [ix[nodes[j] + " | " + dn] for j in js if nodes[j] + " | " + dn in ix]
-    PhiT = Phi.T.astype(np.float64); meas = sorted({b.split(" | ")[0] for b in names}); cells = []
+    PhiT = Phi.T.astype(np.float64); meas = sorted({b.split(" | ")[0] for b in names}); cells = []; lists = []
     for c in keep:
         b0 = nix["c:all:" + c]; a = anc(b0); bn = [b0] + [j for j in a if not isc(nodes[j])]; cn = [j for j in a if isc(nodes[j])]
         for m in meas:
@@ -89,7 +91,11 @@ def one(H, tag):
                 b = bix[f"{m} | {dr}"]; md = mdir(m, dn); fk = ix.get(f"c:all:{c} | {md} | {FAMILY[m]}"); base = split(bn, md); cls = split(cn, md); blkc = A[len(nodes) + b]
                 p = soft(logw[b] + (blkc + A[base + cls + ([fk] if fk is not None else [])].sum(0)) @ PhiT); pc = soft(logw[b] + (blkc + A[cls].sum(0)) @ PhiT); pb = soft(logw[b] + blkc @ PhiT)
                 cells.append([c, m, dn, int(n), round(float(0.5 * np.abs(p - pb).sum()), 4), round(float(0.5 * np.abs(p - pc).sum()), 4)])
+                if SAVE: lists.append([c, m, dn, int(n), int(b), [int(x) for x in base + cls + ([fk] if fk is not None else [])], [int(x) for x in cls]])
     json.dump({"mode": mode, "tag": tag, "conditions": len(keep), "cells": cells, "train_ll": K.FIT["train_ll"]}, open(f"{outd}/{tag}.json", "w"))
+    if SAVE:   # coefficients for statistics computed later (null_peak.py): block row of b is len(nodes) + b
+        np.savez_compressed(f"{outd}/{tag}_coef.npz", A=A.astype(np.float16), logw=np.asarray(logw, np.float32), n_nodes=len(nodes))
+        json.dump(lists, open(f"{outd}/{tag}_cells.json", "w"))
     print(tag, len(keep), "conditions", len(cells), "cells; median TV vs usual", np.median([x[4] for x in cells]), "vs class", np.median([x[5] for x in cells]), flush=True)
 for s in seeds:
     one(H0 if mode == "real" else relabel(np.random.default_rng(s)), f"{mode}_{s}")

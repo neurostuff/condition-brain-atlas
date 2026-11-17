@@ -70,6 +70,7 @@ td .where { color: var(--muted); font-size: 13px; }
 .cellbtn i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-soft); border-radius: 4px; z-index: 0; }
 .cellbtn.m i { background: color-mix(in srgb, var(--bar2) 24%, transparent); }
 .cellbtn span { position: relative; z-index: 1; }
+.rpk { font-family: var(--mono); font-weight: 500; font-size: 11px; color: var(--good); white-space: nowrap; }
 .cellbtn .mk { font-family: var(--body); font-weight: 400; color: var(--good); margin-right: 5px; font-size: 11px; }
 .trust.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 900px) { .trust.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -256,7 +257,9 @@ td .where { color: var(--muted); font-size: 13px; }
           var tr = c.transfer && c.transfer[m];
           if (tr) note += ' When this measure was withheld, the rest predicted its peaks ' + (tr[0] >= 0 ? 'better' : 'worse') + ' than the measure’s usual pattern (' + sg(tr[0], 2) + ' per peak, ' + tr[1] + ' peaks).';
           var np = c.np && c.np[j][dir === 'less' ? 0 : 1];
-          if (np) note += ' Against shuffled diagnoses, this pattern ' + (np[0] < 0.05 ? 'stands out' : 'does not stand out') + ' from the measure’s usual pattern (p = ' + pfmt(np[0]) + ') and ' + (np[1] < 0.05 ? 'stands out' : 'does not stand out') + ' from its class (p = ' + pfmt(np[1]) + ').';
+          var pk = c.pk && c.pk[j][dir === 'less' ? 0 : 1];
+          if (np) note += ' Share of peaks moved, against shuffled diagnoses: ' + (np[0] < 0.05 ? 'stands out' : 'does not stand out') + ' from the measure’s usual pattern (p = ' + pfmt(np[0]) + ') and ' + (np[1] < 0.05 ? 'stands out' : 'does not stand out') + ' from its class (p = ' + pfmt(np[1]) + ').';
+          if (pk) note += ' Largest rise in predicted peak density anywhere in the brain, against shuffled diagnoses: p = ' + pfmt(pk[0]) + ' against the measure’s usual pattern, p = ' + pfmt(pk[1]) + ' against its class.';
           // what the map is built from: share of the variation over the brain added by each group of labels
           var own = [], parents = c.base[md].slice(); if (c.own[md]) own.push(parents.shift()); if (f != null) own.push(f);
           var w = [own, parents, c.cls[md]].map(function (g) { return g.length ? variance(field(g)) : 0; }), tot = w[0] + w[1] + w[2] || 1;
@@ -275,16 +278,17 @@ td .where { color: var(--muted); font-size: 13px; }
           var K = IVM.k, o = ((i * D.meta.measures.length + j) * 2 + (dir === 'less' ? 0 : 1)) * K, cl = bsel.value === 'class' ? 4 : 2;
           for (var e = 0; e < K; e++) { var kk = G.ivi[o + e], w7 = (o + e) * 7; if (kk !== 255) iv[kk] = {slo: G.iv[w7] / 100, shi: G.iv[w7 + 1] / 100, llo: G.iv[w7 + cl] / 100, lhi: G.iv[w7 + cl + 1] / 100, plo: G.iv[w7 + 6] >> 4, phi: G.iv[w7 + 6] & 15}; }
         }
+        var RP = {}; if (c && c.rp) { var rpl = c.rp[j][dir === 'less' ? 0 : 1]; if (rpl) rpl[bsel.value === 'class' ? 1 : 0].forEach(function (x) { RP[x[0]] = x[1]; }); }
         Rg.list.forEach(function (r) { r.iv = iv[r.k]; top = Math.max(top, r.share * (r.iv ? Math.max(1, r.iv.shi) : 1)); });
         function rng(a, b, k) { return ' <em>(' + a.toFixed(k) + ' to ' + b.toFixed(k) + ')</em>'; }
         el.querySelector('.regions').innerHTML = Rg.list.length ? (c && G.iv ? '<li class="head"><span>Region</span><span></span><span>Share of peaks</span><span>Relative to comparison</span></li>' : '') + Rg.list.map(function (r) { var v = r.iv;
-          return '<li><span>' + esc(r.name) + '</span><span class="rbar"><i style="width:' + (100 * r.share / top).toFixed(1) + '%"></i>' + (v ? '<b style="left:' + (100 * r.share * v.slo / top).toFixed(1) + '%;width:' + Math.max(0.5, 100 * r.share * (v.shi - v.slo) / top).toFixed(1) + '%"></b>' : '') + '</span>' +
+          var rpv = RP[r.k]; return '<li><span>' + esc(r.name) + (rpv != null && rpv < 0.05 ? ' <b class="rpk" title="Region test against shuffled diagnoses, uncorrected">p ' + pfmt(rpv) + '</b>' : '') + '</span><span class="rbar"><i style="width:' + (100 * r.share / top).toFixed(1) + '%"></i>' + (v ? '<b style="left:' + (100 * r.share * v.slo / top).toFixed(1) + '%;width:' + Math.max(0.5, 100 * r.share * (v.shi - v.slo) / top).toFixed(1) + '%"></b>' : '') + '</span>' +
             '<span class="rv">' + (100 * r.share).toFixed(1) + '%' + (v ? rng(100 * r.share * v.slo, 100 * r.share * v.shi, 1) : '') + '</span>' +
             '<span class="rl' + (v && r.lift * v.llo > 1 ? ' solid' : '') + '">' + r.lift.toFixed(2) + '×' + (v ? rng(r.lift * v.llo, r.lift * v.lhi, 2) : '') + '</span></li>'; }).join('') : '<li><span class="sub">No region stands out from the comparison.</span></li>';
         var r0 = Rg.list[0];
         if (r0 && r0.iv) pred = 'If one new study reported ' + IVM.peaks + ' peaks, ' + (r0.iv.plo === r0.iv.phi ? r0.iv.plo : r0.iv.plo + ' to ' + r0.iv.phi) + ' of them would be expected in the first region (' + IVM.level + '% interval). A single study varies far more than the expected share, because peaks from one paper cluster. <a href="#about">How the intervals were tested</a>.';
         el.querySelector('.pred').innerHTML = pred;
-        el.querySelector('.ivnote').textContent = c && G.iv ? ' In brackets: ' + IVM.level + '% intervals from refitting the model ' + IVM.draws + ' times on resampled papers. A relative share in dark type stays above 1 across its interval.' : '';
+        el.querySelector('.ivnote').textContent = (c && G.iv ? ' In brackets: ' + IVM.level + '% intervals from refitting the model ' + IVM.draws + ' times on resampled papers. A relative share in dark type stays above 1 across its interval.' : '') + (Rg.list.some(function (r) { return RP[r.k] != null && RP[r.k] < 0.05; }) ? ' “p” beside a region: its share relative to the comparison beats the same region in the model fitted to shuffled diagnoses at p < 0.05 (uncorrected; about one region in eight passes by chance; published cells only).' : '');
         el.querySelector('.atlas').textContent = Rg.atlas === 'gm' ? 'Regions from the Harvard-Oxford atlas (cortical and subcortical). It does not cover the cerebellum, which is assigned by position.' : 'Regions from the ' + Rg.atlas + '.';
       }
       sel.addEventListener('change', render); if (bsel) bsel.addEventListener('change', render);
@@ -467,7 +471,21 @@ td .where { color: var(--muted); font-size: 13px; }
       '<h3>Centre in a commonly reported region (top 5% of grey matter by reported peaks)</h3><div class="scroll" style="max-width:860px"><table>' + PH + '<tbody>' + plantRows(cm) + '</tbody></table></div>' +
       '<p class="sub small">With nothing planted, ALE’s single-voxel p &lt; 0.05 at the centre fired in ' + ks.map(function (k) { return pc(cm.ale_p05_null[k]) + ' of draws at ' + k + ' studies'; }).join(', ') + ', because real peaks are common there. The atlas test and “ALE vs null” are calibrated on the same null draws.</p>' +
       '<h3>Centre in a region of middling peak density</h3><div class="scroll" style="max-width:860px"><table>' + PH + '<tbody>' + plantRows(md) + '</tbody></table></div>' +
-      '<p>Nothing planted gives nothing found: tested against its class, the invented condition passes no more often than the threshold allows, and ALE put no cluster at an unplanted centre. With a location in mind, the atlas finds a weak effect in a commonly reported region from about 5 studies; a calibrated ALE region test needs about 20. In a less crowded region both work from 3. Searching the whole brain, the two are about as sensitive. The share-moved numbers this page shows almost never detected a planted effect, which is why each published cell now also carries its shuffled-diagnosis test.</p>';
+      '<p>Nothing planted gives nothing found: tested against its class, the invented condition passes no more often than the threshold allows, and ALE put no cluster at an unplanted centre. With a location in mind, the atlas finds a weak effect in a commonly reported region from about 5 studies; a calibrated ALE region test needs about 20. In a less crowded region both work from 3. Searching the whole brain, the two are about as sensitive. The share of peaks moved, read as a raw number, almost never detected a planted effect; the atlas columns above use the log ratio of predicted peak density instead, and the next section applies that test to every published cell.</p>' +
+      (v.peak ? peakAbout(v.peak, N) : '');
+  }
+  function peakAbout(K, N) {
+    function pc1(x) { return (100 * x).toFixed(0) + '%'; }
+    var big = (N.beyond_all || []).map(function (x) { var pk = D.conditions[x[0]].pk[x[1]][x[2]]; return pk ? Math.max(pk[0], pk[1]) : null; }).filter(function (x) { return x != null; });
+    return '<h2>The peak test on published cells</h2><p>Each published cell was also tested the way the planted effects were, against the same ' + K.fits[0] + ' + ' + K.fits[1] + ' shuffled fits: the largest log ratio of its predicted peak density to the comparison anywhere in the brain, and the log ratio of its share of predicted peaks in each atlas region (Harvard–Oxford regions for grey matter measures, JHU tracts for fractional anisotropy, diffusivity and white matter volume). A map’s note gives the whole-brain p-values; a region in its top-region list carries a “p” when its own test passes.</p>' +
+      '<div class="scroll" style="max-width:640px"><table><thead><tr><th></th><th class="num">Against the measure’s usual pattern</th><th class="num">Against the class</th></tr></thead><tbody>' +
+      '<tr><td>Published cells with whole-brain p &lt; 0.05</td><td class="num">' + K.whole_p05[0] + ' of ' + K.cells.toLocaleString() + '</td><td class="num">' + K.whole_p05[1] + ' of ' + K.cells.toLocaleString() + '</td></tr>' +
+      '<tr><td>Expected by chance (shuffled cells passing)</td><td class="num">' + Math.round(K.chance_whole_p05[0] * K.cells) + ' (' + pc1(K.chance_whole_p05[0]) + ')</td><td class="num">' + Math.round(K.chance_whole_p05[1] * K.cells) + ' (' + pc1(K.chance_whole_p05[1]) + ')</td></tr>' +
+      '<tr><td>Regions with a rise that pass at p &lt; 0.05</td><td class="num">' + pc1(K.regions_p05[0] / K.regions_tested[0]) + ' of ' + K.regions_tested[0].toLocaleString() + '</td><td class="num">' + pc1(K.regions_p05[1] / K.regions_tested[1]) + ' of ' + K.regions_tested[1].toLocaleString() + '</td></tr>' +
+      '<tr><td>Same, in shuffled cells</td><td class="num">' + pc1(K.chance_region_p05[0]) + '</td><td class="num">' + pc1(K.chance_region_p05[1]) + '</td></tr></tbody></table></div>' +
+      '<p>Both tests find more than chance (against the class, only a little more) and fewer cells than the share-moved test (' + N.any.p05 + ' cells against the measure). Only regions where a cell predicts more peaks than its comparison are tested, so by chance about one in eight of them passes, not one in twenty: a “p” beside a region is a lead, not a finding. The chance rates come from three shuffled fits per null tested against the other nine. ' +
+      (big.length ? 'The share-moved test is the stronger one for the largest cells: the ' + big.length + ' cells above every shuffled cell in it reach only p = ' + pfmt(Math.min.apply(null, big)) + ' to ' + pfmt(Math.max.apply(null, big)) + ' in the whole-brain peak test (the larger of their two p-values), presumably because a shift spread over much of the brain need not raise any one point above what shuffled cells reach. ' : '') +
+      'The condition grids therefore keep the share-moved marks. The smallest whole-brain p-value possible with these shuffles is about ' + pfmt(K.min_p_whole) + '.</p>';
   }
   function viewAbout() {
     var m = D.meta, t = m.tests || {}, f = t.future || {}, bm = t.cell_by_measure || {};
