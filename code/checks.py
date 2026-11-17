@@ -21,6 +21,17 @@ additive: regularised additive regression on labels with a point-process likelih
         R maps per condition, mixed into each of the 28 blocks by a learned loading matrix (columns scaled to mean square
         one half; the first two start as the less and more indicators, so R = 2 with --freeze-l is the nofam variant)
     --tests inner             3-fold paper test within the papers before CUT (for choosing penalties without the test data)
+    --basis bspline --knot 12 tensor-product cubic B-splines on knots every KNOT mm (columns with almost no support in the
+        brain dropped) instead of the Gaussian bumps
+    --size S --rough R [--rough-order 1|2]   penalty per label f: pen_f * (S |A_f|^2 + R A_f Q A_f^T), Q the sum over the
+        three axes of D^T D, D the first or second differences between neighbouring basis coefficients (P-splines,
+        Eilers & Marx 1996, 10.1214/ss/1038425655); default S 1, R 0 (ridge only)
+    --peak-width S [--mirror]   each peak's weight in the fitting likelihood is 1 / sum over the contrast's peaks j of
+        exp(-d_ij^2 / 2 S^2) (itself included): a lone peak counts 1, a clump of peaks within about S mm shares about 1.
+        --mirror: the distance to j's left-right mirror image counts too, so bilateral pairs share. Held-out scores are
+        reported unweighted (as before) and weighted ("weighted gain"). The window is unchanged.
+    Every test also reports calibration of the strongest predictions: for each held-out contrast, the voxels where the
+    model's map most exceeds the window (top 1% and 5% of voxels by ratio), observed peaks there / expected peaks there.
     --tests ic                fit on everything; AIC and BIC with the effective number of parameters of the penalised fit,
         edf = trace((H + P)^-1 H), H the Hessian of the negative log-likelihood and P of the penalty, estimated with
         Rademacher probes and conjugate gradients (Hutchinson). n for BIC = peaks; also given with n = papers.
@@ -48,6 +59,42 @@ def basis(xyz):
     ijk = np.rint((xyz - xyz.min(0)) / 4).astype(int); keep = np.all(ijk % STEP == 1, 1); cen = xyz[keep]
     d2 = ((xyz[:, None, :] - cen[None]) ** 2).sum(-1); Phi = np.exp(-d2 / (2 * SIG ** 2)); Phi[d2 > (3 * SIG) ** 2] = 0
     return Phi.astype(np.float32)
+
+
+def bspline_basis(xyz, h, order=2):
+    """tensor-product cubic B-splines with knots every h mm; returns Phi (voxels x kept functions) and the difference
+    penalty Q (kept x kept, scipy sparse) of the given order between neighbouring coefficients along each axis"""
+    import scipy.sparse as sp
+    def b3(u):      # cubic B-spline of unit knot spacing centred at 0 (support -2..2), peak 2/3
+        a = np.abs(u); return np.where(a < 1, 2 / 3 - a ** 2 + a ** 3 / 2, np.where(a < 2, (2 - a) ** 3 / 6, 0.0))
+    lo = xyz.min(0) - h; n = np.ceil((xyz.max(0) + h - lo) / h).astype(int) + 1; rows, cols, vals = [], [], []
+    base = np.floor((xyz - lo) / h).astype(int)
+    for off in np.array(np.meshgrid(*[np.arange(-1, 3)] * 3, indexing="ij")).reshape(3, -1).T:
+        k = base + off; ok = np.all((k >= 0) & (k < n), 1); w = np.prod(b3((xyz - lo) / h - k), 1); ok &= w > 0
+        rows.append(np.where(ok)[0]); cols.append(np.ravel_multi_index(k[ok].T, n)); vals.append(w[ok])
+    M = sp.csc_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))), shape=(len(xyz), int(np.prod(n))))
+    keep = np.where(np.asarray(M.sum(0)).ravel() >= 0.1)[0]; Phi = M[:, keep].toarray().astype(np.float32); pos = -np.ones(int(np.prod(n)), int); pos[keep] = np.arange(len(keep))
+    g = np.array(np.unravel_index(keep, n)).T; Ds = []
+    for ax in range(3):
+        e = np.zeros(3, int); e[ax] = 1
+        steps = [g - e, g, g + e] if order == 2 else [g, g + e]
+        idx = [np.where(np.all((q >= 0) & (q < n), 1), pos[np.ravel_multi_index(np.clip(q, 0, n - 1).T, n)], -1) for q in steps]
+        okr = np.all(np.stack(idx) >= 0, 0); coef = [1.0, -2.0, 1.0] if order == 2 else [-1.0, 1.0]; r = np.arange(okr.sum())
+        Ds.append(sp.csr_matrix((np.concatenate([np.full(len(r), c) for c in coef]), (np.tile(r, len(coef)), np.concatenate([i[okr] for i in idx]))), shape=(len(r), len(keep))))
+    D_ = sp.vstack(Ds); return Phi, (D_.T @ D_).tocoo()
+
+
+def peak_weights(C, width, mirror=False):
+    """per contrast, each peak's weight 1 / sum_j exp(-d_ij^2 / 2 width^2) over the contrast's own peaks (itself included);
+    with mirror, j's left-right mirror image also counts (the larger of the two kernels)"""
+    out = []
+    for f in C["foci"]:
+        if not len(f): out.append(np.zeros(0)); continue
+        p = C["xyz"][np.asarray(f)]; k = np.exp(-((p[:, None] - p[None]) ** 2).sum(-1) / (2 * width ** 2))
+        if mirror:
+            q = p * np.array([-1.0, 1.0, 1.0]); km = np.exp(-((p[:, None] - q[None]) ** 2).sum(-1) / (2 * width ** 2)); np.fill_diagonal(km, 0); k = np.maximum(k, km)
+        out.append(1.0 / k.sum(1))
+    return out
 
 
 FLIP = {"diffusivity"}     # measures whose "more" means the damage that "less" means elsewhere (--variant ...+meaning)
@@ -109,6 +156,9 @@ def fit_additive(C, blk, B, Phi, X, tr, lam, dev, steps=300, lr=0.03, chunk=int(
     Phit = torch.tensor(Phi, device=dev); Xd = X.to(dev); A = torch.zeros(Xd.shape[1], Phi.shape[1], device=dev, requires_grad=True)
     pv_ = FIT.get("pen") or {}; penv = torch.tensor([pv_.get(g, lam) for g in FIT["groups"]], dtype=torch.float32, device=dev)[:, None] if "groups" in FIT else lam
     A0 = torch.tensor(FIT["A0"], device=dev) if FIT.get("A0") is not None else 0.0     # shrinkage target (uncertainty.py draws it from the ridge prior); default zero
+    Qt = None
+    if FIT.get("rough", 0) > 0:
+        Q = FIT["Q"]; Qt = torch.sparse_coo_tensor(np.stack([Q.row, Q.col]), Q.data.astype(np.float32), Q.shape).coalesce().to(dev)
     params = [A]; Xc = FIT.get("Xc"); R = FIT.get("rank", 0) if Xc is not None else 0
     if R:
         # learned coupling: contrast j in block b gets sum_r Leff[b, r] * (sum_c Xc[j, c] Z[r, c]) on top of the fixed labels
@@ -131,18 +181,20 @@ def fit_additive(C, blk, B, Phi, X, tr, lam, dev, steps=300, lr=0.03, chunk=int(
         if not len(ds): return out, ds
         u, inv = np.unique(gid[ds], return_inverse=True); pos = np.arange(len(ds))
         for k in range(0, len(u), chunk):
-            sel = (inv >= k) & (inv < k + chunk); rep_ = np.zeros(min(chunk, len(u) - k), dtype=int); rep_[inv[sel] - k] = ds[sel]; pr, pv, pp = [], [], []
+            sel = (inv >= k) & (inv < k + chunk); rep_ = np.zeros(min(chunk, len(u) - k), dtype=int); rep_[inv[sel] - k] = ds[sel]; pr, pv, pp, pw = [], [], [], []
             for j, d, q in zip(inv[sel] - k, ds[sel], pos[sel]):
-                f = C["foci"][d]; pr += [j] * len(f); pv += list(f); pp += [q] * len(f)
-            out.append(tuple(torch.tensor(x, device=dev) for x in (rep_, pr, pv, blk_[rep_], pp)))
+                f = C["foci"][d]; pr += [j] * len(f); pv += list(f); pp += [q] * len(f); pw += list(FIT["pw"][d]) if FIT.get("pw") is not None else [1.0] * len(f)
+            out.append(tuple(torch.tensor(x, device=dev) for x in (rep_, pr, pv, blk_[rep_], pp)) + (torch.tensor(pw, dtype=torch.float32, device=dev),))
         return out, ds
     batches, trd = pack(tr)
-    npk = sum(len(b[1]) for b in batches); state = {"tot": 0.0}
+    npk = float(sum(b[5].sum() for b in batches)); state = {"tot": 0.0}      # total peak weight (the number of peaks when unweighted)
     def closure():
         opt.zero_grad(); tot = 0.0
-        for ds, pd_, pv, bb, _ in batches:
-            lp = torch.log_softmax(logw[bb] + linear(ds, bb) @ Phit.T, 1)[pd_, pv].sum(); (-lp / npk).backward(); tot += float(lp.detach())
-        pen = (penv * (A - A0) ** 2).sum() / npk + (lamz * (Z ** 2).sum() / npk if R else 0.0); pen.backward(); state["tot"] = tot
+        for ds, pd_, pv, bb, _, pw in batches:
+            lp = (pw * torch.log_softmax(logw[bb] + linear(ds, bb) @ Phit.T, 1)[pd_, pv]).sum(); (-lp / npk).backward(); tot += float(lp.detach())
+        pen = (penv * FIT.get("size_pen", 1.0) * (A - A0) ** 2).sum() / npk + (lamz * (Z ** 2).sum() / npk if R else 0.0)
+        if Qt is not None: pen = pen + FIT["rough"] * (penv * A * torch.sparse.mm(Qt, A.T).T).sum() / npk
+        pen.backward(); state["tot"] = tot
         return torch.tensor(-tot / npk) + pen.detach()
     if FIT.get("opt", "lbfgs") == "lbfgs":
         opt = torch.optim.LBFGS(params, lr=1.0, max_iter=20, history_size=20, line_search_fn="strong_wolfe")
@@ -160,7 +212,7 @@ def fit_additive(C, blk, B, Phi, X, tr, lam, dev, steps=300, lr=0.03, chunk=int(
         dot = lambda x, y: sum(float((a_ * b_).sum()) for a_, b_ in zip(x, y))
         def hvp(vs):
             o = [torch.zeros_like(p_) for p_ in params]
-            for ds, pd_, pv, bb, _ in batches:
+            for ds, pd_, pv, bb, _, pw in batches:
                 nll = -torch.log_softmax(logw[bb] + linear(ds, bb) @ Phit.T, 1)[pd_, pv].sum(); g = torch.autograd.grad(nll, params, create_graph=True)
                 for o_, h_ in zip(o, torch.autograd.grad(sum((a_ * b_).sum() for a_, b_ in zip(g, vs)), params)): o_ += h_
             return o
@@ -174,14 +226,20 @@ def fit_additive(C, blk, B, Phi, X, tr, lam, dev, steps=300, lr=0.03, chunk=int(
                 if dot(r, r) ** 0.5 < 1e-3 * r0: break
                 z = [r_ / q_ for r_, q_ in zip(r, pens)]; rz2 = dot(r, z); pdir = [z_ + (rz2 / rz) * p_ for z_, p_ in zip(z, pdir)]; rz = rz2
             est.append(dot(v, x)); print(f"  edf probe {probe}: {est[-1]:.0f} ({it + 1} CG steps)", flush=True)
-        edf = float(np.mean(est)); wll = float(sum(logw[bb][pd_, pv].sum() for ds, pd_, pv, bb, _ in batches))
+        edf = float(np.mean(est)); wll = float(sum(logw[bb][pd_, pv].sum() for ds, pd_, pv, bb, _, pw in batches))
         FIT["ic"] = {"peaks": npk, "loglik": tot, "window_loglik": wll, "edf": edf, "edf_se": float(np.std(est) / len(est) ** 0.5), "parameters": int(sum(p_.numel() for p_ in params)),
                      "AIC": -2 * tot + 2 * edf, "BIC_peaks": -2 * tot + np.log(npk) * edf, "window_AIC": -2 * wll}
     def score(ds):
         bt, dd = pack(ds); m = torch.zeros(len(dd), device=dev); wv = torch.zeros(len(dd), device=dev)
         with torch.no_grad():
-            for rows_, pd_, pv, bb, pp in bt:
-                m.index_add_(0, pp, torch.log_softmax(logw[bb] + linear(rows_, bb) @ Phit.T, 1)[pd_, pv]); wv.index_add_(0, pp, logw[bb][pd_, pv])
+            for rows_, pd_, pv, bb, pp, pw in bt:
+                lpf = torch.log_softmax(logw[bb] + linear(rows_, bb) @ Phit.T, 1); m.index_add_(0, pp, lpf[pd_, pv]); wv.index_add_(0, pp, logw[bb][pd_, pv])
+                if "wscore" in FIT: FIT["wscore"][0] += float((pw * (lpf[pd_, pv] - logw[bb][pd_, pv])).sum()); FIT["wscore"][1] += float(pw.sum())
+                if "calib" in FIT:          # strongest predictions: top 1% / 5% of voxels by model / window ratio, per distinct row
+                    g_ = lpf - torch.log_softmax(logw[bb], 1); npr = torch.bincount(pd_, minlength=len(rows_)).float()
+                    for q, key in ((0.01, "top1"), (0.05, "top5")):
+                        thr = torch.quantile(g_, 1 - q, dim=1, keepdim=True); mask = g_ >= thr
+                        FIT["calib"][key][0] += float(mask[pd_, pv].sum()); FIT["calib"][key][1] += float((npr * (lpf.exp() * mask).sum(1)).sum())
         return [(int(d), float(x), float(y), len(C["foci"][d])) for d, x, y in zip(dd, m.cpu(), wv.cpu())]
     return score
 
@@ -197,10 +255,18 @@ def main():
     ap.add_argument("--fold-seed", type=int, default=None, help="another random split of papers into 5 folds (default: the corpus's own)")
     ap.add_argument("--pen", default=""); ap.add_argument("--rank", type=int, default=0); ap.add_argument("--freeze-l", action="store_true"); ap.add_argument("--l-seed", type=int, default=0)
     ap.add_argument("--window-from", default="toks"); ap.add_argument("--opt", default="lbfgs"); ap.add_argument("--outer", type=int, default=15); ap.add_argument("--save-scores", action="store_true"); ap.add_argument("--device", default="cuda:0"); ap.add_argument("--years", default="data_all/paper_years.json")
+    ap.add_argument("--basis", default="bump"); ap.add_argument("--knot", type=float, default=12.0); ap.add_argument("--size", type=float, default=1.0); ap.add_argument("--rough", type=float, default=0.0); ap.add_argument("--rough-order", type=int, default=2)
+    ap.add_argument("--peak-width", type=float, default=0.0); ap.add_argument("--mirror", action="store_true")
     a = ap.parse_args(); global STEP, SIG; STEP, SIG = a.step, a.sig; FIT["wfrom"] = a.window_from; FIT["opt"] = a.opt; FIT["outer"] = a.outer; H = json.load(open(a.corpus)); C = load_corpus(a.corpus); blk, names = P.blocks_of(H, C, "measure_dir"); B = len(names); FIT["names"] = names
     if a.fold_seed is not None:
         pp = sorted({H["docs"][x]["group"] for x in C["ids"]}); pf = dict(zip(pp, np.random.default_rng(a.fold_seed).integers(0, 5, len(pp)))); C["fold"] = np.array([pf[H["docs"][x]["group"]] for x in C["ids"]])
-    Phi = basis(C["xyz"]); nodes = C["nodes"]; D = len(C["ids"]); meas = [H["docs"][x]["measure"] for x in C["ids"]]
+    if a.basis == "bspline": Phi, FIT["Q"] = bspline_basis(C["xyz"], a.knot, a.rough_order)
+    else:
+        Phi = basis(C["xyz"])
+        if a.rough > 0: raise SystemExit("--rough needs --basis bspline")
+    FIT["pw"] = peak_weights(C, a.peak_width, a.mirror) if a.peak_width > 0 else None
+    if FIT["pw"] is not None: _w = np.concatenate(FIT["pw"]); print(f"peak weights (width {a.peak_width} mm, mirror {a.mirror}): {len(_w)} peaks carry total weight {_w.sum():.0f}; median {np.median(_w):.2f}", flush=True)
+    FIT["size_pen"] = a.size; FIT["rough"] = a.rough; nodes = C["nodes"]; D = len(C["ids"]); meas = [H["docs"][x]["measure"] for x in C["ids"]]
     base = lambda i: nodes[i].split(" | ")[0]; is_c = lambda i: nodes[i].startswith("c:all:") and not nodes[i][6:].startswith(("class ", "any condition"))
     dc = [sorted({base(i) for i in C["auth"][d] if is_c(i)}) for d in range(D)]
     print(f"{D} documents, basis {Phi.shape}", flush=True)
@@ -258,7 +324,7 @@ def main():
     dev = torch.device(a.device); out = {"variant": a.variant, "lam": a.lam, "features": F, "basis": Phi.shape[1], "args": vars(a)}
     def gain(sc): n = sum(x[3] for x in sc); return (sum(x[1] for x in sc) - sum(x[2] for x in sc)) / n, n
     for test in a.tests.split(","):
-        t0 = time.time()
+        t0 = time.time(); FIT["calib"] = {"top1": [0.0, 0.0], "top5": [0.0, 0.0]}; FIT["wscore"] = [0.0, 0.0]
         if test == "paper":
             sc = []
             for k in range(5):
@@ -311,6 +377,10 @@ def main():
             for k in range(3):
                 score = fit_additive(C, blk, B, Phi, X, [d for d in range(D) if yr[d] < a.cut and f3[d] != k], a.lam, dev, a.steps); sc += score([d for d in range(D) if yr[d] < a.cut and f3[d] == k])
             g, n = gain(sc); out["inner"] = g; bd = keep(sc, "inner"); print(f"{a.variant} lam {a.lam} pen {a.pen} rank {a.rank} inner: gain {g:+.5f} ({bd}) over {n} peaks {time.time() - t0:.0f}s", flush=True)
+        cal = {k: round(v[0] / v[1], 4) for k, v in FIT["calib"].items() if v[1] > 0}
+        if FIT.get("pw") is not None and FIT["wscore"][1] > 0:
+            wg = FIT["wscore"][0] / FIT["wscore"][1]; out[test + "_weighted_gain"] = wg; print(f"  {test} weighted gain (peaks weighted by distance, as in the fit) {wg:+.4f}", flush=True)
+        if cal: out[test + "_calibration_observed_over_expected"] = cal; print(f"  {test} calibration, observed / expected peaks where the model most exceeds the window: {cal}", flush=True)
         json.dump(out, open(a.out, "w"), indent=1)
 
 

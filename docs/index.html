@@ -70,6 +70,9 @@ td .where { color: var(--muted); font-size: 13px; }
 .cellbtn i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-soft); border-radius: 4px; z-index: 0; }
 .cellbtn.m i { background: color-mix(in srgb, var(--bar2) 24%, transparent); }
 .cellbtn span { position: relative; z-index: 1; }
+.cellbtn .mk { font-family: var(--body); font-weight: 400; color: var(--good); margin-right: 5px; font-size: 11px; }
+.trust.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) { .trust.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .cellbtn.none { border: 1px dashed var(--line); color: var(--muted); font-family: var(--body); }
 .cellbtn:hover { border-color: var(--accent); }
 .cellbtn[aria-pressed="true"] { border: 2px solid var(--accent); padding: 3px 7px; }
@@ -144,6 +147,8 @@ td .where { color: var(--muted); font-size: 13px; }
   function mdir(m, d) { return D.meta.flip.indexOf(m) >= 0 ? (d === 'less' ? 'more' : 'less') : d; }   // direction by meaning: more diffusivity is damage, like less of the rest
   function dirTag(d) { return '<span class="tag ' + d + '">' + (d === 'less' ? 'Less in patients' : 'More in patients') + '</span>'; }
   function cname(i) { return esc(cap(D.conditions[i].name)); }
+  function pfmt(p) { return p < 0.01 ? p.toFixed(3) : p.toFixed(2); }
+  function npMark(np) { return !np ? 0 : np[1] < 0.05 && np[0] < 0.05 ? 2 : np[0] < 0.05 ? 1 : 0; }   // 2: beyond its class and the measure; 1: beyond the measure only
   function related(c, m, d) {   // contrasts of this condition in the same family of measures and the same direction by meaning
     var fam = D.meta.family[m], md = mdir(m, d), n = 0;
     Object.keys(c.measures).forEach(function (m2) { if (D.meta.family[m2] !== fam) return; DIRS.forEach(function (d2, k) { if (mdir(m2, d2) === md) n += c.measures[m2][k]; }); });
@@ -250,6 +255,8 @@ td .where { color: var(--muted); font-size: 13px; }
           else note = n + ' published contrast' + (n === 1 ? '' : 's') + ' in this measure and direction' + (rel ? ', plus ' + rel + ' in related ' + fam + ' measures.' : '.');
           var tr = c.transfer && c.transfer[m];
           if (tr) note += ' When this measure was withheld, the rest predicted its peaks ' + (tr[0] >= 0 ? 'better' : 'worse') + ' than the measure’s usual pattern (' + sg(tr[0], 2) + ' per peak, ' + tr[1] + ' peaks).';
+          var np = c.np && c.np[j][dir === 'less' ? 0 : 1];
+          if (np) note += ' Against shuffled diagnoses, this pattern ' + (np[0] < 0.05 ? 'stands out' : 'does not stand out') + ' from the measure’s usual pattern (p = ' + pfmt(np[0]) + ') and ' + (np[1] < 0.05 ? 'stands out' : 'does not stand out') + ' from its class (p = ' + pfmt(np[1]) + ').';
           // what the map is built from: share of the variation over the brain added by each group of labels
           var own = [], parents = c.base[md].slice(); if (c.own[md]) own.push(parents.shift()); if (f != null) own.push(f);
           var w = [own, parents, c.cls[md]].map(function (g) { return g.length ? variance(field(g)) : 0; }), tot = w[0] + w[1] + w[2] || 1;
@@ -299,7 +306,7 @@ td .where { color: var(--muted); font-size: 13px; }
   function rowClicks(tb) { tb.addEventListener('click', function (e) { var tr = e.target.closest('tr.row'); if (tr && !e.target.closest('a')) location.hash = tr.getAttribute('data-h'); }); }
 
   function viewStart() {
-    var m = D.meta, t = m.tests, f = t.future || {};
+    var m = D.meta, t = m.tests, f = t.future || {}, V = m.validation.null;
     var gaps = GAPS.filter(function (g) { return g.n === 0; }).sort(function (a, b) { return gapScore(b) - gapScore(a); }), seen = {}, top = [];
     gaps.forEach(function (g) { if (top.length < 5 && !seen[g.i]) { seen[g.i] = 1; top.push(g); } });
     var deps = DEPS.slice(0, 5), prs = D.pairs.slice(0, 5);
@@ -316,10 +323,11 @@ td .where { color: var(--muted); font-size: 13px; }
         prs.map(function (p) { return '<li><a href="#c-' + p[0] + '">' + cname(p[0]) + '</a> and <a href="#c-' + p[1] + '">' + cname(p[1]).toLowerCase() + '</a><span>Similarity ' + p[2].toFixed(2) + ' · ' + esc(D.conditions[p[0]]['class']) + ' and ' + esc(D.conditions[p[1]]['class']) + '</span></li>'; }).join('') +
         '</ol><a class="all" href="#pairs">All ' + D.pairs.length + ' pairs →</a></section></div>' +
       '<h2>How far to trust a prediction</h2><p class="sub">Gain in log-likelihood per held-out peak over knowing only the measure. Zero means the condition told the model nothing.</p>' +
-      '<div class="trust"><div><b>' + sg(t.paper) + '</b><span>A fifth of the papers withheld (95% interval ' + sg(t.paper_ci[0]) + ' to ' + sg(t.paper_ci[1]) + ')</span></div>' +
+      '<div class="trust four"><div><b>' + sg(t.paper) + '</b><span>A fifth of the papers withheld (95% interval ' + sg(t.paper_ci[0]) + ' to ' + sg(t.paper_ci[1]) + ')</span></div>' +
       '<div><b>' + sg(t.cell) + '</b><span>One whole measure withheld for a well-studied condition; the model beat the measure’s usual pattern in ' + Math.round(100 * t.cell_won) + '% of cases</span></div>' +
-      '<div><b>' + sg(f['condition seen, measure new']) + '</b><span>Papers from 2020 on, for a measure that was new for the condition, fitted to earlier papers only</span></div></div>' +
-      '<p>The gains are real and small. A prediction is a reason to look, not a finding. It is strongest where the condition has many contrasts in related measures and where that kind of measure has a good track record. <a href="#about">Method and limits</a></p>';
+      '<div><b>' + sg(f['condition seen, measure new']) + '</b><span>Papers from 2020 on, for a measure that was new for the condition, fitted to earlier papers only</span></div>' +
+      '<div><b>' + V.any.p05.toLocaleString() + '</b><span>of ' + V.cells.toLocaleString() + ' published cells stand out from the same model fitted to shuffled diagnoses (p &lt; 0.05); chance alone gives about ' + Math.round(0.05 * V.cells).toLocaleString() + '</span></div></div>' +
+      '<p>The gains are real and small. A prediction is a reason to look, not a finding. It is strongest where the condition has many contrasts in related measures and where that kind of measure has a good track record. Most of what a small cell shows, and most of what any single condition shows beyond its class, is what shuffled diagnoses also produce. <a href="#about">Method and limits</a></p>';
   }
 
   function viewGaps() {
@@ -333,7 +341,7 @@ td .where { color: var(--muted); font-size: 13px; }
       '<select id="gst" aria-label="Published contrasts"><option value="0">Untested (0 contrasts)</option><option value="3">Barely tested (1 to 3)</option><option value="all">Both</option></select>' +
       '<label for="gsort">Sort by</label><select id="gsort"><option value="score">Best supported and specific</option><option value="spec">Most specific to the condition</option><option value="rel">Most related evidence</option><option value="track">Track record of the measure</option></select></div>' +
       '<p class="sub small" id="gcount"></p><div class="scroll"><table>' + GAPHEAD + '<tbody id="grows"></tbody></table></div><button type="button" class="more-btn" id="gmore" hidden>Show 60 more</button><p class="empty" id="gnone" hidden>No prediction matches.</p>' +
-      '<p class="sub small" style="margin-top:14px">Specific: share of predicted peaks that move relative to the class’s pattern. Related: published contrasts of the condition in the same family of measures and direction. Track record: gain per peak when a measure of this kind was withheld for a condition and predicted from the rest; green is +0.03 or more.</p>';
+      '<p class="sub small" style="margin-top:14px">Specific: share of predicted peaks that move relative to the class’s pattern. Related: published contrasts of the condition in the same family of measures and direction. Track record: gain per peak when a measure of this kind was withheld for a condition and predicted from the rest; green is +0.03 or more. On published cells, specificity of 0.10 to 0.20 is mostly what shuffled diagnoses also produce (<a href="#about">the test</a>), so rank by it, but do not read it as evidence on its own.</p>';
     var ids = ['gq', 'gcls', 'gm', 'gst', 'gsort'], el = {}; ids.forEach(function (k) { el[k] = document.getElementById(k); try { var v = sessionStorage.getItem('cba-' + k); if (v != null) el[k].value = v; } catch (e) {} });
     var rows = document.getElementById('grows'), more = document.getElementById('gmore'), none = document.getElementById('gnone'), count = document.getElementById('gcount'), shown = 60;
     function draw() {
@@ -399,8 +407,10 @@ td .where { color: var(--muted); font-size: 13px; }
     var c = D.conditions[i]; if (!c) return viewConditions();
     var mx = 1; c.cells.forEach(function (p) { mx = Math.max(mx, p[0][0], p[1][0]); });
     var order = D.meta.measures.map(function (m, j) { return j; }).sort(function (p, q) { return (c.cells[q][0][0] + c.cells[q][1][0]) - (c.cells[p][0][0] + c.cells[p][1][0]) || p - q; });
-    function btn(j, k) { var n = c.cells[j][k][0], d = DIRS[k], m = D.meta.measures[j];
-      return '<td><button type="button" class="cellbtn ' + (n ? (k ? 'm' : '') : 'none') + '" data-j="' + j + '" data-d="' + d + '" aria-pressed="false" aria-label="' + esc(lab(m)) + ', ' + d + ' in patients, ' + (n ? n + ' contrasts' : 'untested') + '">' + (n ? '<i style="width:' + Math.max(4, 100 * Math.sqrt(n / mx)).toFixed(0) + '%"></i><span>' + n + '</span>' : '<span>untested</span>') + '</button></td>'; }
+    var MK = ['', ' beyond chance against the measure', ' beyond chance against the measure and the class'];
+    function btn(j, k) { var n = c.cells[j][k][0], d = DIRS[k], m = D.meta.measures[j], mk = npMark(c.np && c.np[j][k]);
+      return '<td><button type="button" class="cellbtn ' + (n ? (k ? 'm' : '') : 'none') + '" data-j="' + j + '" data-d="' + d + '" aria-pressed="false" aria-label="' + esc(lab(m)) + ', ' + d + ' in patients, ' + (n ? n + ' contrasts' + MK[mk] : 'untested') + '">' + (n ? '<i style="width:' + Math.max(4, 100 * Math.sqrt(n / mx)).toFixed(0) + '%"></i><span>' + (mk ? '<b class="mk" aria-hidden="true">' + (mk === 2 ? '◆' : '◇') + '</b>' : '') + n + '</span>' : '<span>untested</span>') + '</button></td>'; }
+    var nT = 0, nU = 0, nC = 0; c.cells.forEach(function (p, j) { [0, 1].forEach(function (k) { if (p[k][0]) { nT++; var mk = npMark(c.np[j][k]); nU += mk > 0; nC += mk === 2; } }); });
     var grid = order.map(function (j) { var m = D.meta.measures[j], tr = c.transfer && c.transfer[m];
       return '<tr><td>' + esc(lab(m)) + '</td>' + btn(j, 0) + btn(j, 1) + '<td class="num">' + (tr ? sg(tr[0], 2) : '') + '</td></tr>'; }).join('');
     var near = c.near.map(function (x) { return '<li><a href="#c-' + x[0] + '">' + cname(x[0]) + '<span>' + x[1].toFixed(2) + '</span></a></li>'; }).join('');
@@ -408,8 +418,8 @@ td .where { color: var(--muted); font-size: 13px; }
     var kids = c.kids && c.kids.length ? '<h2>More specific conditions</h2><p class="sub">This entry pools groups described in general terms. The specific conditions build on it.</p><ul class="near">' + c.kids.map(function (k) { return '<li><a href="#c-' + k + '">' + cname(k) + '<span>' + D.conditions[k].contrasts + '</span></a></li>'; }).join('') + '</ul>' : '';
     var cross = D.pairs.filter(function (p) { return p[0] === i || p[1] === i; }).map(function (p) { var o = p[0] === i ? p[1] : p[0]; return '<li><a href="#c-' + o + '">' + cname(o) + '<span>' + p[2].toFixed(2) + ' · ' + esc(D.conditions[o]['class']) + '</span></a></li>'; }).join('');
     main.innerHTML = '<h1>' + esc(cap(c.name)) + '</h1>' +
-      '<div class="chips"><span>' + esc(cap(c['class'])) + par + '</span><span><b>' + c.contrasts.toLocaleString() + '</b> contrasts</span><span><b>' + c.papers.toLocaleString() + '</b> papers</span>' + (c.also ? '<span>also present in <b>' + c.also.toLocaleString() + '</b> other contrasts</span>' : '') + '<span><b>' + strength(c) + '</b></span></div>' +
-      '<h2>What has been published, and what has not</h2><p class="sub">Published contrasts for each measure and direction. Choose any cell to see its map below, including the untested ones, where the map is a prediction.</p>' +
+      '<div class="chips"><span>' + esc(cap(c['class'])) + par + '</span><span><b>' + c.contrasts.toLocaleString() + '</b> contrasts</span><span><b>' + c.papers.toLocaleString() + '</b> papers</span>' + (c.also ? '<span>also present in <b>' + c.also.toLocaleString() + '</b> other contrasts</span>' : '') + '<span><b>' + strength(c) + '</b></span><span title="Published cells whose pattern beats the same model fitted to shuffled diagnoses (p < 0.05, uncorrected)"><b>' + nU + '</b> of ' + nT + ' published cells beat shuffled diagnoses' + (nC ? ', <b>' + nC + '</b> beyond the class too' : '') + '</span></div>' +
+      '<h2>What has been published, and what has not</h2><p class="sub">Published contrasts for each measure and direction. Choose any cell to see its map below, including the untested ones, where the map is a prediction. ◇ the pattern stands out from the measure’s usual pattern more than the same model fitted to shuffled diagnoses (p &lt; 0.05); ◆ it also stands out from its class. Uncorrected: about a quarter of ◇ and over half of ◆ are expected to be chance. <a href="#about">How this was tested</a>.</p>' +
       '<div class="scroll" style="max-width:640px"><table class="grid"><thead><tr><th>Measure</th><th class="num">Less in patients</th><th class="num">More in patients</th><th class="num" title="Gain per peak when this measure was withheld and predicted from the rest">Withheld test</th></tr></thead><tbody id="cgrid">' + grid + '</tbody></table></div>' +
       '<h2>Brain pattern</h2><p class="sub">Where the model expects more reported differences for this condition than the comparison. Each map is scaled to its own strongest point.</p>' +
       viewerHTML('c', i) + kids +
@@ -438,6 +448,27 @@ td .where { color: var(--muted); font-size: 13px; }
       '<div class="scroll" style="max-width:760px"><table><thead><tr><th>Withheld</th><th class="num" title="Coverage of the 80% interval when peaks are treated as independent">80% interval, peaks independent</th><th class="num">50% interval</th><th class="num">80% interval</th><th class="num">95% interval</th><th class="num">Region counts</th></tr></thead><tbody>' +
       row('A fifth of the papers', v.coverage.paper) + row('One whole measure for a condition', v.coverage.cell) + '</tbody></table></div>';
   }
+  function valAbout(v) {
+    var N = v.null, P = v.plant;
+    function pc(x) { return x == null ? '' : Math.round(100 * x) + '%'; }
+    function sizeRows() { return N.any.by_size.map(function (a, q) { var b = N['class'].by_size[q]; return '<tr><td>' + a.contrasts.replace('-', ' to ').replace(/^(\d+) to \1$/, '$1') + '</td><td class="num">' + a.real_cells.toLocaleString() + '</td><td class="num">' + a.real_median.toFixed(2) + '</td><td class="num">' + a.null_median.toFixed(2) + '</td><td class="num">' + pc(a.real_above_null_95th) + '</td><td class="num">' + pc(b.real_above_null_95th) + '</td></tr>'; }).join(''); }
+    function thrRows() { return N.any.thresholds.filter(function (a) { return a.share_moved_at_least >= 0.1 && a.share_moved_at_least <= 0.2; }).map(function (a) { var b = N['class'].thresholds.filter(function (x) { return x.share_moved_at_least === a.share_moved_at_least; })[0]; return '<tr><td>' + a.share_moved_at_least.toFixed(2) + ' or more</td><td class="num">' + pc(a.expected_false_share) + '</td><td class="num">' + pc(b && b.expected_false_share) + '</td></tr>'; }).join(''); }
+    var lone = (N.beyond_all || []).map(function (x) { var i = x[0], j = x[1], k = x[2]; return '<a href="' + cellHash(i, j, DIRS[k]) + '">' + cname(i) + ', ' + esc(lab(D.meta.measures[j]).toLowerCase()) + ', ' + DIRS[k] + ' in patients</a> (' + D.conditions[i].cells[j][k][0] + ' contrasts)'; });
+    function plantRows(p) { return p.rows.map(function (r) { return '<tr><td class="num">' + r.k + '</td><td>' + (r.carry === 'all' ? 'all' : 'half') + '</td><td class="num">' + pc(r.known[0]) + '</td><td class="num">' + pc(r.known[1]) + '</td><td class="num">' + pc(r.known[2]) + '</td><td class="num">' + pc(r.known[3]) + '</td><td class="num">' + pc(r.whole[0]) + '</td><td class="num">' + pc(r.whole[1]) + '</td><td class="num">' + pc(r.whole[2]) + '</td></tr>'; }).join(''); }
+    var PH = '<thead><tr><th rowspan="2" class="num">Studies</th><th rowspan="2">Carrying it</th><th colspan="4">Known location</th><th colspan="3">Whole-brain search</th></tr><tr><th class="num">Atlas</th><th class="num">Atlas, 6 mm weights</th><th class="num">ALE vs null</th><th class="num">ALE p &lt; 0.05</th><th class="num">Atlas</th><th class="num">Atlas, 6 mm weights</th><th class="num">ALE</th></tr></thead>';
+    var cm = P.filter(function (p) { return p.where === 'common'; })[0], md = P.filter(function (p) { return p.where === 'middling'; })[0];
+    var ks = Object.keys(cm.ale_p05_null);
+    return '<h2>Does it find patterns that are not there?</h2><p>The model was refitted ' + N.fits + ' times with each paper’s diagnoses handed to another paper at random (any diagnosis, and separately only diagnoses of the same class), keeping every contrast’s measure, direction and peaks. A shuffled condition has no real pattern, so whatever its map shows is what the method produces from nothing. Each published cell’s two numbers, the share of predicted peaks that move against the measure’s usual pattern and against the class, were compared with the shuffled cells holding a similar number of contrasts.</p>' +
+      '<div class="scroll" style="max-width:760px"><table><thead><tr><th>Contrasts in the cell</th><th class="num">Published cells</th><th class="num">Median moved, published</th><th class="num">Median moved, shuffled</th><th class="num">Above shuffled 95th percentile: against the measure</th><th class="num">… against the class</th></tr></thead><tbody>' + sizeRows() + '</tbody></table></div>' +
+      '<p>A typical cell moves about as much as a shuffled one: much of what a small cell shows comes from the clumped peaks of the few papers behind it. ' + N.any.p05.toLocaleString() + ' of ' + N.cells.toLocaleString() + ' published cells beat the shuffled ones at p &lt; 0.05 against the measure (◇ on a condition’s grid), where chance gives about ' + Math.round(0.05 * N.cells) + '; against the class, ' + N['class'].p05 + ' (◆ when both hold). With ' + N.fits + ' shuffled fits no cell can pass a correction for testing ' + N.cells.toLocaleString() + ' cells, so the marks are uncorrected. Expected share of false highlights at a given share moved:</p>' +
+      '<div class="scroll" style="max-width:520px"><table><thead><tr><th>Share moved</th><th class="num">Against the measure</th><th class="num">Against the class</th></tr></thead><tbody>' + thrRows() + '</tbody></table></div>' +
+      (lone.length ? '<p>Cells above every shuffled cell of their size in both tests: ' + lone.join('; ') + '. They are the large, well-studied cells; few patterns beyond the class are this clear.</p>' : '') +
+      '<h2>Does it find patterns that are there?</h2><p>Grey matter decreases from the mood class were relabelled as one invented condition, and an effect was planted in the studies of each draw: one peak per study, scattered 10 mm around a centre, in half or all of them. The test asks whether the invented condition’s map stands out from its class more than in draws with nothing planted (the 95th percentile of ' + 20 + ' such draws), either at the planted centre (a known location) or anywhere in the brain (found within 12 mm). ALE on the same studies (NiMARE, cluster-level FWE) is the comparison. Ten draws per row, so each rate is uncertain by about ±30%.</p>' +
+      '<h3>Centre in a commonly reported region (top 5% of grey matter by reported peaks)</h3><div class="scroll" style="max-width:860px"><table>' + PH + '<tbody>' + plantRows(cm) + '</tbody></table></div>' +
+      '<p class="sub small">With nothing planted, ALE’s single-voxel p &lt; 0.05 at the centre fired in ' + ks.map(function (k) { return pc(cm.ale_p05_null[k]) + ' of draws at ' + k + ' studies'; }).join(', ') + ', because real peaks are common there. The atlas test and “ALE vs null” are calibrated on the same null draws.</p>' +
+      '<h3>Centre in a region of middling peak density</h3><div class="scroll" style="max-width:860px"><table>' + PH + '<tbody>' + plantRows(md) + '</tbody></table></div>' +
+      '<p>Nothing planted gives nothing found: tested against its class, the invented condition passes no more often than the threshold allows, and ALE put no cluster at an unplanted centre. With a location in mind, the atlas finds a weak effect in a commonly reported region from about 5 studies; a calibrated ALE region test needs about 20. In a less crowded region both work from 3. Searching the whole brain, the two are about as sensitive. The share-moved numbers this page shows almost never detected a planted effect, which is why each published cell now also carries its shuffled-diagnosis test.</p>';
+  }
   function viewAbout() {
     var m = D.meta, t = m.tests || {}, f = t.future || {}, bm = t.cell_by_measure || {};
     function row(name, v, extra) { return '<tr><td>' + name + '</td><td class="num">' + (v == null ? '' : sg(v)) + '</td><td class="sub">' + (extra || '') + '</td></tr>'; }
@@ -451,10 +482,11 @@ td .where { color: var(--muted); font-size: 13px; }
       row('A fifth of the papers', t.paper, t.paper_ci ? '95% interval ' + sg(t.paper_ci[0]) + ' to ' + sg(t.paper_ci[1]) + ', from resampling papers' : '') + row('One whole measure for a well-studied condition', t.cell, 'The model won in ' + Math.round(100 * (t.cell_won || 0)) + '% of cases') + row('Papers from 2020 on, fitted to earlier papers', f.all) +
       row('… of those, a combination seen five or more times before', f['cell seen 5+ times']) + row('… of those, a measure new for a known condition', f['condition seen, measure new'], 'The hardest case, and the one “Untested predictions” relies on') + row('… of those, a condition not seen before', f['condition unseen']) + '</tbody></table></div>' +
       (m.intervals ? ivAbout(m.intervals) : '') +
+      (m.validation ? valAbout(m.validation) : '') +
       '<h2>Track record by measure</h2><p>Gain per peak when the measure was withheld for a condition and predicted from the rest. Predictions for diffusion and metabolism have worked best; task activation and EEG or MEG sources have barely worked.</p>' +
       '<div class="scroll" style="max-width:520px"><table><thead><tr><th>Measure withheld</th><th class="num">Gain</th><th class="num">Peaks</th></tr></thead><tbody>' + tr + '</tbody></table></div>' +
       '<h2>What was tried and dropped</h2><p>Each addition to the model had to improve predictions on withheld papers. A separate penalty for the family-level labels and counting diffusivity by its meaning passed. A learned matrix linking every measure to every other did not: it predicted worse than the fixed families at every size tried. An earlier version built on shared networks predicted about half as well.</p>' +
-      '<h2>Limits</h2><p>The intervals cover resampling of papers and clustering within a paper; they do not cover errors in reading the papers or the choice of model. The gains are small: knowing the condition adds well under half of what knowing the measure adds, and most of it comes from the broad class. Peaks say where a difference was reported, not how large it was. The model learns from what was published, including where researchers chose to look. Conditions, measures and directions were read from papers by language models and are not individually checked.</p>';
+      '<h2>Limits</h2><p>The intervals cover resampling of papers and clustering within a paper; they do not cover errors in reading the papers or the choice of model. The gains are small: knowing the condition adds well under half of what knowing the measure adds, and most of it comes from the broad class. Peaks say where a difference was reported, not how large it was. The model learns from what was published, including where researchers chose to look. Conditions, measures and directions were read from papers by language models and are not individually checked. The shuffled-diagnosis and planted-effect tests cover the published cells and grey matter; untested cells, where a map is a prediction, cannot be tested this way.</p>';
   }
 
   function route() {
