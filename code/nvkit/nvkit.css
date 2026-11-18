@@ -1,8 +1,10 @@
 /* nvkit:start */
 /* NiiVue viewer (nvkit/nvkit.css, spliced by nvkit/inline.py). Uses the page's --panel, --line, --ink, --muted, --accent, --accent-soft. */
 .nvk-box { position: relative; height: clamp(300px, 56vw, 480px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
-.nvk-box[data-layout="slices"] { height: clamp(240px, 30vw, 340px); }
-@media (max-width: 640px) { .nvk-box[data-layout="slices"] { height: 92vw; } }
+.nvk { container-type: inline-size; }
+/* slices: one row of four tiles when the viewer is wide, a 2 x 2 grid when it is narrow (NiiVue picks by the box's shape) */
+.nvk-box[data-layout="slices"] { height: auto; aspect-ratio: 3 / 1; min-height: 220px; }
+@container (max-width: 720px) { .nvk-box[data-layout="slices"] { aspect-ratio: 6 / 5; } .nvk-box { height: auto; aspect-ratio: 1 / 1; max-height: 520px; } }
 .nvk-wait[hidden] { display: none; }
 .nvk-box canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 .nvk-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }

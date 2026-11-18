@@ -85,12 +85,6 @@ td .where { color: var(--muted); font-size: 13px; }
 .seg button[aria-pressed="true"] { color: var(--ink); background: var(--accent-soft); font-weight: 600; }
 .vnote { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
 .vnote.inferred { color: var(--warn-ink); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; display: inline-block; }
-.views { display: grid; grid-template-columns: 1.15fr 0.95fr 0.95fr; gap: 10px; align-items: end; }
-.views figure { margin: 0; min-width: 0; }
-.views canvas { display: block; width: 100%; height: auto; }
-.views figcaption { font-size: 12px; color: var(--muted); margin-top: 3px; }
-.scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-.scale i { display: inline-block; flex: 0 0 110px; height: 9px; border-radius: 2px; background: linear-gradient(90deg, #fec44f, #ec7014, #cc4c02, #8c2d04, #50140a); }
 .built { max-width: 760px; }
 .stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--line); margin: 6px 0; }
 .stack i { display: block; height: 100%; }
@@ -108,7 +102,7 @@ td .where { color: var(--muted); font-size: 13px; }
 .regions .rv em, .regions .rl em { font-style: normal; opacity: 0.8; }
 .regions .rl.solid { color: var(--ink); }
 .pred { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
-@media (max-width: 640px) { .views { grid-template-columns: 1fr 1fr; } .views figure:first-child { grid-column: 1 / -1; } .regions li { grid-template-columns: 1fr auto auto; gap: 8px; } .regions .rbar, .regions li.head span:nth-child(2) { display: none; } .regions .rv em, .regions .rl em { display: block; } }
+@media (max-width: 640px) { .regions li { grid-template-columns: 1fr auto auto; gap: 8px; } .regions .rbar, .regions li.head span:nth-child(2) { display: none; } .regions .rv em, .regions .rl em { display: block; } }
 .near { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 0; margin: 0; list-style: none; }
 .near a { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; text-decoration: none; color: var(--ink); background: var(--panel); font-size: 14px; }
 .near a span { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-left: 6px; }
@@ -123,8 +117,10 @@ td .where { color: var(--muted); font-size: 13px; }
 /* nvkit:start */
 /* NiiVue viewer (nvkit/nvkit.css, spliced by nvkit/inline.py). Uses the page's --panel, --line, --ink, --muted, --accent, --accent-soft. */
 .nvk-box { position: relative; height: clamp(300px, 56vw, 480px); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
-.nvk-box[data-layout="slices"] { height: clamp(240px, 30vw, 340px); }
-@media (max-width: 640px) { .nvk-box[data-layout="slices"] { height: 92vw; } }
+.nvk { container-type: inline-size; }
+/* slices: one row of four tiles when the viewer is wide, a 2 x 2 grid when it is narrow (NiiVue picks by the box's shape) */
+.nvk-box[data-layout="slices"] { height: auto; aspect-ratio: 3 / 1; min-height: 220px; }
+@container (max-width: 720px) { .nvk-box[data-layout="slices"] { aspect-ratio: 6 / 5; } .nvk-box { height: auto; aspect-ratio: 1 / 1; max-height: 520px; } }
 .nvk-wait[hidden] { display: none; }
 .nvk-box canvas { width: 100%; height: 100%; display: block; touch-action: none; }
 .nvk-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
@@ -281,7 +277,7 @@ var NVK = (function () {
     var id = 'nvk' + Math.random().toString(36).slice(2, 8);
     el.innerHTML = '<div class="nvk-seg" role="group" aria-label="View">' + [['slices', 'Slices'], ['axial', 'Axial'], ['coronal', 'Coronal'], ['sagittal', 'Sagittal'], ['3d', '3D']].map(function (x, i) {
         return '<button type="button" data-l="' + x[0] + '" aria-pressed="' + (i === 0) + '">' + x[1] + '</button>'; }).join('') + '</div>' +
-      '<label class="nvk-th" for="' + id + '">Show above <input id="' + id + '" type="range" min="0" max="95" step="5" value="35"> <output>35%</output> of the maximum</label>';
+      '<label class="nvk-th" for="' + id + '">Show above <input id="' + id + '" type="range" min="0" max="95" step="5" value="35"> <output>35%</output> of full colour</label>';
     var r = el.querySelector('input'), o = el.querySelector('output');
     Array.prototype.forEach.call(el.querySelectorAll('[data-l]'), function (b) { b.addEventListener('click', function () {
       Array.prototype.forEach.call(el.querySelectorAll('[data-l]'), function (x) { x.setAttribute('aria-pressed', String(x === b)); }); view.layout(b.getAttribute('data-l')); }); });
@@ -329,8 +325,6 @@ var NVK = (function () {
   function gapScore(g) { return g.spec * Math.min(1, g.rel / 10) * (g.track != null && g.track >= 0.03 ? 1 : 0.4); }
 
   // ---- maps: P(v) = softmax(log window + Phi . sum of label coefficients), computed here from maps.txt ----
-  var VIEWS = [{a: 1, b: 2, cap: 'Side view, front to the right'}, {a: 0, b: 2, cap: 'Front view, left on the left'}, {a: 0, b: 1, cap: 'Top view, front at the top'}];
-  var LO = 0.35, RAMP = [[254, 196, 79], [236, 112, 20], [204, 76, 2], [140, 45, 4], [80, 20, 10]];
   function loadMaps(buf) {
     var L = D.meta.layout;
     function arr(n, C) { var x = L[n]; return new C(buf, x[0], x[2].reduce(function (p, q) { return p * q; }, 1)); }
@@ -352,22 +346,6 @@ var NVK = (function () {
     for (v = 0; v < V; v++) out[v] /= tot;
     return out;
   }
-  function drawView(cv, vals, mx, a, b) {
-    var W = G.shape[a], H = G.shape[b], img = new Float32Array(W * H), mask = new Uint8Array(W * H), v;
-    for (v = 0; v < G.V; v++) { var p = (H - 1 - G.ijk[3 * v + b]) * W + G.ijk[3 * v + a]; mask[p] = 1; if (vals[v] > img[p]) img[p] = vals[v]; }
-    var S = 8; cv.width = W * S; cv.height = H * S;
-    var small = document.createElement('canvas'); small.width = W; small.height = H;
-    var sc = small.getContext('2d'), id = sc.createImageData(W, H), d = id.data;
-    for (var q = 0; q < W * H; q++) {
-      if (!mask[q]) continue;
-      var x = img[q] / mx;
-      if (x >= LO) { var t = (x - LO) / (1 - LO) * (RAMP.length - 1), i0 = Math.min(Math.floor(t), RAMP.length - 2), f = t - i0;
-        for (var c = 0; c < 3; c++) d[4 * q + c] = RAMP[i0][c] * (1 - f) + RAMP[i0 + 1][c] * f; d[4 * q + 3] = 255; }
-      else { d[4 * q] = d[4 * q + 1] = d[4 * q + 2] = 128; d[4 * q + 3] = 60; }
-    }
-    sc.putImageData(id, 0, 0);
-    var ctx = cv.getContext('2d'); ctx.clearRect(0, 0, cv.width, cv.height); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(small, 0, 0, cv.width, cv.height);
-  }
   function topRegions(p, base, j) {
     var m = D.meta.measures[j], wmMeasure = D.meta.wm_measures.indexOf(m) >= 0, useWM = wmMeasure && D.meta.wm_names;
     var lb = useWM ? G.wm : G.gm, names = useWM ? D.meta.wm_names : D.meta.gm_names, n = names.length, sum = new Float64Array(n), bs = new Float64Array(n), v;
@@ -376,6 +354,13 @@ var NVK = (function () {
     for (var i = 0; i < n; i++) { if (names[i] === 'Unlabeled' || names[i] === 'White matter, no tract label' || (!wmMeasure && names[i] === 'White matter')) continue; out.push({k: i, name: names[i], share: sum[i], extra: sum[i] - bs[i], lift: sum[i] / Math.max(bs[i], 1e-9)}); }
     out.sort(function (x, y) { return y.extra - x.extra; });
     return {list: out.filter(function (r) { return r.extra > 0; }).slice(0, 5), atlas: useWM ? D.meta.wm_atlas : 'gm'};
+  }
+  // one NiiVue viewer for the whole page (one WebGL context), moved into whichever condition or class page is showing
+  var PV = null, PVregion = null;
+  function sharedView(slot) {
+    if (!PV) { var d = document.createElement('div');
+      PV = {el: d, view: NVK.viewer(d, {grid: {ijk: G.ijk, shape: G.shape, origin: D.meta.grid.origin, mm: D.meta.grid.mm}, region: function (v) { return PVregion ? PVregion(v) : ''; }})}; }
+    slot.appendChild(PV.el); PV.view.refresh(); return PV.view;
   }
   function viewerHTML(kind, i) { return '<div class="viewer" data-kind="' + kind + '" data-i="' + i + '"></div>'; }
   var current = null;   // the condition page's viewer: {set(j, d), state}
@@ -391,19 +376,17 @@ var NVK = (function () {
       var cmp = c ? '<label for="' + bid + '">Compared with</label><select id="' + bid + '"><option value="measure">what this measure usually shows</option><option value="class">its class (' + esc(c['class']) + ')</option></select>' : '';
       el.innerHTML = '<div class="vbar"><label for="' + sid + '">Measure</label><select id="' + sid + '">' + opts + '</select>' +
         '<div class="seg" role="group" aria-label="Direction"><button type="button" data-d="less" aria-pressed="true">Less in patients</button><button type="button" data-d="more" aria-pressed="false">More in patients</button></div>' + cmp + '</div><p class="vnote"></p>' +
-        '<div class="views">' + VIEWS.map(function (w) { return '<figure><canvas role="img"></canvas><figcaption>' + w.cap + '</figcaption></figure>'; }).join('') + '</div>' +
-        '<div class="scale"><span>Weaker</span><i></i><span>Stronger. Coloured: where peaks are more likely than the comparison, at 35% or more of this map’s largest excess. Grey: the rest of the brain.</span></div>' +
-        '<div class="nv3"><h3>Look closer in 3D</h3><div class="nvk-ctl"><label>Map <select class="nvmap"><option value="x">Rise over the comparison</option><option value="r">Ratio to the comparison</option><option value="p">Predicted peak density</option></select></label><span class="nvc"></span></div><div class="nvv"></div>' +
-        '<p class="nvk-note">Click or drag on a slice to move the crosshair; scroll to step through slices; drag the 3D view to turn it. Click a region below to jump to its strongest point. Values are on the model’s 4 mm grid, drawn smoothly over the MNI152 template.</p></div>' +
+        '<div class="nv3"><div class="nvk-ctl"><label>Map <select class="nvmap"><option value="x">Rise over the comparison</option><option value="r">Ratio to the comparison</option><option value="p">Predicted peak density</option></select></label><span class="nvc"></span></div><div class="nvv"></div>' +
+        '<p class="nvk-note">Warm colours: more predicted peaks than the comparison; cool: fewer. Shown from 35% of the map’s largest value, which is full colour (move the slider to change it). The crosshair starts at the strongest point; click or drag on a slice to move it, scroll to step through slices, drag the 3D view to turn it, and click a region below to jump to its strongest point. Maps are on the model’s 4 mm grid, drawn smoothly over the MNI152 template.</p></div>' +
         (c ? '<div class="built"><h3>What this prediction is built from</h3><div class="stack" role="img"></div><p class="legend"></p></div>' : '') +
         '<h3>Top regions</h3><p class="sub small" style="margin:0">Ranked by how much more of the predicted peaks fall in each region than under the comparison. Shown: the region’s share of predicted peaks, and that share relative to the comparison.<span class="ivnote"></span></p><ol class="regions"></ol><p class="pred"></p><p class="sub small atlas" style="margin-top:6px"></p>';
       var sel = el.querySelector('#' + sid), bsel = el.querySelector('#' + bid), dir = 'less';
-      // the 3D viewer (NiiVue, started when it scrolls near the screen): the same predicted maps as the projections
+      // the map: a NiiVue viewer of the predicted map (rise over the comparison, ratio to it, or predicted peak density)
       var nvEl = el.querySelector('.nvv'), nvMap = el.querySelector('.nvmap'), view3 = null, ctl3 = null, last = null, kind3 = null;
       function start3() {
         if (view3) return view3;
-        view3 = NVK.viewer(nvEl, {grid: {ijk: G.ijk, shape: G.shape, origin: D.meta.grid.origin, mm: D.meta.grid.mm},
-          region: function (v) { return last && last.lb === G.wm ? D.meta.wm_names[G.wm[v]] : D.meta.gm_names[G.gm[v]]; }});
+        view3 = sharedView(nvEl);
+        PVregion = function (v) { return last && last.lb === G.wm ? D.meta.wm_names[G.wm[v]] : D.meta.gm_names[G.gm[v]]; };
         ctl3 = NVK.controls(el.querySelector('.nvc'), view3); show3(); return view3;
       }
       function show3() {
@@ -419,8 +402,6 @@ var NVK = (function () {
         kind3 = k; view3.show(map).then(function () { ctl3.sync(); }, function () {});
       }
       nvMap.addEventListener('change', show3);
-      if ('IntersectionObserver' in window) { var io = new IntersectionObserver(function (es) { if (es.some(function (e) { return e.isIntersecting; })) { io.disconnect(); start3(); } }, {rootMargin: '300px'}); io.observe(nvEl); }
-      else start3();
       el.querySelector('.regions').addEventListener('click', function (e) {
         var b = e.target.closest('.rgo'); if (!b || !last) return;
         var k = +b.getAttribute('data-k'), lb = last.lb; start3();
@@ -453,9 +434,7 @@ var NVK = (function () {
           Array.prototype.forEach.call(main.querySelectorAll('.cellbtn'), function (b) { b.setAttribute('aria-pressed', String(+b.getAttribute('data-j') === j && b.getAttribute('data-d') === dir)); });
         } else { ids = ids.concat(k.ids[md]); note = 'What the class adds to this measure’s usual pattern, shared by every condition in it.'; }
         var p = el.querySelector('.vnote'); p.className = cls; p.textContent = note;
-        var pm = prob(ids, j), pb = prob(bids, j), vals = new Float32Array(G.V), mx = 0;
-        for (var q = 0; q < G.V; q++) { var dlt = pm[q] - pb[q]; if (dlt > 0) { vals[q] = dlt; if (dlt > mx) mx = dlt; } }
-        Array.prototype.forEach.call(el.querySelectorAll('canvas'), function (cv, wv) { drawView(cv, vals, mx || 1, VIEWS[wv].a, VIEWS[wv].b); cv.setAttribute('aria-label', lab(m) + ', ' + VIEWS[wv].cap); });
+        var pm = prob(ids, j), pb = prob(bids, j);
         var Rg = topRegions(pm, pb, j), IVM = D.meta.intervals, iv = {}, top = 0, pred = '';
         last = {pm: pm, pb: pb, lb: Rg.atlas === 'gm' ? G.gm : G.wm}; show3();
         if (c && G.iv) {      // intervals from refits on resampled papers, stored for the regions most likely to be listed
@@ -466,7 +445,7 @@ var NVK = (function () {
         Rg.list.forEach(function (r) { r.iv = iv[r.k]; top = Math.max(top, r.share * (r.iv ? Math.max(1, r.iv.shi) : 1)); });
         function rng(a, b, k) { return ' <em>(' + a.toFixed(k) + ' to ' + b.toFixed(k) + ')</em>'; }
         el.querySelector('.regions').innerHTML = Rg.list.length ? (c && G.iv ? '<li class="head"><span>Region</span><span></span><span>Share of peaks</span><span>Relative to comparison</span></li>' : '') + Rg.list.map(function (r) { var v = r.iv;
-          var rpv = RP[r.k]; return '<li><span><button type="button" class="rgo" data-k="' + r.k + '" title="Show its strongest point in the 3D viewer">' + esc(r.name) + '</button>' + (rpv != null && rpv < 0.05 ? ' <b class="rpk" title="Region test against shuffled diagnoses, uncorrected">p ' + pfmt(rpv) + '</b>' : '') + '</span><span class="rbar"><i style="width:' + (100 * r.share / top).toFixed(1) + '%"></i>' + (v ? '<b style="left:' + (100 * r.share * v.slo / top).toFixed(1) + '%;width:' + Math.max(0.5, 100 * r.share * (v.shi - v.slo) / top).toFixed(1) + '%"></b>' : '') + '</span>' +
+          var rpv = RP[r.k]; return '<li><span><button type="button" class="rgo" data-k="' + r.k + '" title="Show its strongest point on the map">' + esc(r.name) + '</button>' + (rpv != null && rpv < 0.05 ? ' <b class="rpk" title="Region test against shuffled diagnoses, uncorrected">p ' + pfmt(rpv) + '</b>' : '') + '</span><span class="rbar"><i style="width:' + (100 * r.share / top).toFixed(1) + '%"></i>' + (v ? '<b style="left:' + (100 * r.share * v.slo / top).toFixed(1) + '%;width:' + Math.max(0.5, 100 * r.share * (v.shi - v.slo) / top).toFixed(1) + '%"></b>' : '') + '</span>' +
             '<span class="rv">' + (100 * r.share).toFixed(1) + '%' + (v ? rng(100 * r.share * v.slo, 100 * r.share * v.shi, 1) : '') + '</span>' +
             '<span class="rl' + (v && r.lift * v.llo > 1 ? ' solid' : '') + '">' + r.lift.toFixed(2) + '×' + (v ? rng(r.lift * v.llo, r.lift * v.lhi, 2) : '') + '</span></li>'; }).join('') : '<li><span class="sub">No region stands out from the comparison.</span></li>';
         var r0 = Rg.list[0];
@@ -479,7 +458,7 @@ var NVK = (function () {
       Array.prototype.forEach.call(el.querySelectorAll('.seg button'), function (b) { b.addEventListener('click', function () { setDir(b.getAttribute('data-d')); render(); }); });
       if (c) { current = {set: function (j, d, scroll) { sel.value = String(j); setDir(d); render(); if (scroll) el.scrollIntoView({behavior: 'smooth', block: 'start'}); }};
         if (init) { sel.value = String(init.j); setDir(init.d); } }
-      render();
+      render(); start3();
     });
   }
 
@@ -689,7 +668,7 @@ var NVK = (function () {
       '<div class="scroll" style="max-width:520px"><table><thead><tr><th>Measure withheld</th><th class="num">Gain</th><th class="num">Peaks</th></tr></thead><tbody>' + tr + '</tbody></table></div>' +
       '<h2>What was tried and dropped</h2><p>Each addition to the model had to improve predictions on withheld papers. A separate penalty for the family-level labels and counting diffusivity by its meaning passed. A learned matrix linking every measure to every other did not: it predicted worse than the fixed families at every size tried. An earlier version built on shared networks predicted about half as well.</p>' +
       '<h2>Limits</h2><p>The intervals cover resampling of papers and clustering within a paper; they do not cover errors in reading the papers or the choice of model. The gains are small: knowing the condition adds well under half of what knowing the measure adds, and most of it comes from the broad class. Peaks say where a difference was reported, not how large it was. The model learns from what was published, including where researchers chose to look. Conditions, measures and directions were read from papers by language models and are not individually checked. The shuffled-diagnosis and planted-effect tests cover the published cells and grey matter; untested cells, where a map is a prediction, cannot be tested this way.</p>' +
-      '<h2>The 3D viewer</h2><p>Each condition page’s 3D viewer is <a href="https://github.com/niivue/niivue">NiiVue</a> (Hanayik and colleagues). The template under the maps is the ICBM 2009a nonlinear symmetric MNI152 average (Fonov et al. 2011, <a href="https://doi.org/10.1016/j.neuroimage.2010.07.033">doi:10.1016/j.neuroimage.2010.07.033</a>; Copyright (C) 1993–2009 Louis Collins, McConnell Brain Imaging Centre, Montreal Neurological Institute, McGill University), as distributed with nilearn, at 2 mm. The maps themselves are on the model’s 4 mm grid and are interpolated for display.</p>';
+      '<h2>The brain maps</h2><p>The brain maps are drawn with <a href="https://github.com/niivue/niivue">NiiVue</a> (Hanayik and colleagues), in slices, single planes or 3D. The template under the maps is the ICBM 2009a nonlinear symmetric MNI152 average (Fonov et al. 2011, <a href="https://doi.org/10.1016/j.neuroimage.2010.07.033">doi:10.1016/j.neuroimage.2010.07.033</a>; Copyright (C) 1993–2009 Louis Collins, McConnell Brain Imaging Centre, Montreal Neurological Institute, McGill University), as distributed with nilearn, at 2 mm. The maps themselves are on the model’s 4 mm grid and are interpolated for display.</p>';
   }
 
   function route() {

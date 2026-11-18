@@ -118,7 +118,7 @@ var NVK = (function () {
     var id = 'nvk' + Math.random().toString(36).slice(2, 8);
     el.innerHTML = '<div class="nvk-seg" role="group" aria-label="View">' + [['slices', 'Slices'], ['axial', 'Axial'], ['coronal', 'Coronal'], ['sagittal', 'Sagittal'], ['3d', '3D']].map(function (x, i) {
         return '<button type="button" data-l="' + x[0] + '" aria-pressed="' + (i === 0) + '">' + x[1] + '</button>'; }).join('') + '</div>' +
-      '<label class="nvk-th" for="' + id + '">Show above <input id="' + id + '" type="range" min="0" max="95" step="5" value="35"> <output>35%</output> of the maximum</label>';
+      '<label class="nvk-th" for="' + id + '">Show above <input id="' + id + '" type="range" min="0" max="95" step="5" value="35"> <output>35%</output> of full colour</label>';
     var r = el.querySelector('input'), o = el.querySelector('output');
     Array.prototype.forEach.call(el.querySelectorAll('[data-l]'), function (b) { b.addEventListener('click', function () {
       Array.prototype.forEach.call(el.querySelectorAll('[data-l]'), function (x) { x.setAttribute('aria-pressed', String(x === b)); }); view.layout(b.getAttribute('data-l')); }); });
