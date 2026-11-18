@@ -213,7 +213,7 @@ Dj = {"meta": {"corpus": {"with_additional": sum(any(i.startswith("x:all:") for 
                           "meta_papers_dropped": CN.get("dropped: meta-analysis papers", 0), "meta_contrasts_dropped": CN.get("dropped: contrasts of meta-analysis papers", 0)},
                "model": "regression", "variant": VARIANT, "pen": PEN, "lam": lam, "contrasts": D, "papers": len({d["group"] for d in H["docs"].values()}), "peaks": int(sum(len(f) for f in C["foci"])),
                "conditions_all": len(tot), "conditions_shown": len(keep), "min_contrasts": MIN_C, "measures": meas, "labels": LABEL, "family": FAMILY, "flip": sorted(K.FLIP),
-               "wm_measures": WM, "gm_names": GN, "wm_names": WN, "wm_atlas": wm_atlas, "grid": {"shape": shape, "mm": 4},
+               "wm_measures": WM, "gm_names": GN, "wm_names": WN, "wm_atlas": wm_atlas, "grid": {"shape": shape, "mm": 4, "origin": [float(x) for x in xyz.min(0)]},
                "layout": layout, "bumps": int(Phi.shape[1]), "blocks": blocks, "tests": tests, "strength_q": [float(np.quantile(st, q)) for q in (0.33, 0.67)]},
       "conditions": cons, "classes": classes, "pairs": pairs}
 if IV is not None: Dj["meta"]["intervals"] = IVMETA; Dj["meta"]["layout"] = layout

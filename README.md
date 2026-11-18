@@ -70,6 +70,7 @@ The intervals of the expected pattern itself cannot be tested this way, and they
 | `code/pc_model.py` and the report scripts | an earlier author-topic model of the same data, kept for comparison (it predicted about half as well) |
 | `code/*.sh` | job wrappers as run on our GPU server; paths are specific to it |
 | `docs/` | the website (`index.html`, `data.json`, `maps.txt`), served by GitHub Pages |
+| `code/nvkit/` | the website's NiiVue 3D viewer (`nvkit.js`, `nvkit.css`), spliced into `docs/index.html` by `inline.py`; `docs/mni152_2mm.b64.txt` is its template (ICBM 2009a MNI152 from nilearn, 2 mm, base64) |
 | `MODEL_PLAN.md` | the plan for the model, with the test each addition had to pass and its outcome |
 
 ## Running it
