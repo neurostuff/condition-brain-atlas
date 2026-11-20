@@ -7,7 +7,8 @@ condition the vocabulary doesn't hold fails.
 
 check() enforces what build_corpus.add() relies on: a condition pools into the class of the top of its parent chain, so a
 parent must have its child's class. Otherwise the condition's data feed another class's map while its page shows its own
-class. That is how Parkinson disease (parent: parkinsonism, movement_other) fed the movement_other map until 2026-11-19.
+class. That is how Parkinson disease (parent: parkinsonism, movement_other) fed the movement_other map while its page called it
+neurodegenerative, until 2026-11-19.
 """
 import json
 from pathlib import Path
