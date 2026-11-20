@@ -53,8 +53,11 @@ Since 2026-11-15 (the label audit; primary.py):
   no parents, so they take no part in a condition's own map; checks.py uses them only with --variant ...+also.
   LABELS=all is the earlier corpus (every listed condition an equal author), kept for the comparison.
 - META (optional fifth argument, from paper_meta.py): contrasts of papers flagged as meta-analyses are dropped.
-- CLASS_FIX: conditions that the normalization left in its default class "psychiatric_other" and are not psychiatric. A
-  condition missing from the vocabulary now gets the class "unclassified". OUT_DIR/vocabulary.json is the corrected copy.
+- Vocabulary fixes (since 2026-11-19, `vocab_fixes.py`, `vocabulary_fixes.json`): every hand correction of a class, parent or
+  name, with its reason, applied before the hierarchy is built. This includes the 2026-11-15 class fix (conditions left in
+  psychiatric_other that are not psychiatric). The build then fails if any parent's class differs from its child's, since a
+  condition pools into the class at the top of its parent chain. A condition missing from the vocabulary gets the class
+  "unclassified". OUT_DIR/vocabulary.json is the corrected copy.
 
 usage: [STRUCTURE=nested|flat|measure_first|multimodal|multimodal_dir|multimodal_fam] [MIN_LEAF=5] [LABELS=primary|all] python build_corpus.py CONTRASTS.jsonl CONDITION_STRINGS.json VOCABULARY.json OUT_DIR [META.json]
 writes OUT_DIR/corpus_pc_<structure>.json, OUT_DIR/conditions.json, OUT_DIR/corpus_counts_<structure>.json, OUT_DIR/vocabulary.json
@@ -64,6 +67,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from measures import LABEL, measure_group
 from primary import assign, key
+import vocab_fixes
 
 DIR = {"decrease": "dec", "increase": "inc"}
 FAMILY = {"grey matter": "structure", "cortical thickness": "structure", "white matter": "structure", "fa": "diffusion", "diffusivity": "diffusion",
@@ -71,14 +75,12 @@ FAMILY = {"grey matter": "structure", "cortical thickness": "structure", "white 
           "glucose metabolism": "metabolism and perfusion", "perfusion": "metabolism and perfusion", "molecular binding": "molecular",
           "task activation": "task", "eeg meg": "electrophysiology"}
 STRUCTURE = os.environ.get("STRUCTURE", "nested"); MIN_LEAF = int(os.environ.get("MIN_LEAF", "5")); MM = STRUCTURE.startswith("multimodal"); LABELS = os.environ.get("LABELS", "primary"); assert LABELS in ("primary", "all")
-CLASS_FIX = {"lyme disease": "infectious", "botulism": "infectious", "neurofibromatosis": "genetic_syndrome", "gaucher disease": "genetic_syndrome", "thalassemia": "systemic_medical", "optic neuropathy": "sensory_loss"}
 
 
 def main():
     cp, sp, vp, out = sys.argv[1], sys.argv[2], sys.argv[3], Path(sys.argv[4]); out.mkdir(parents=True, exist_ok=True)
     table = json.load(open(sp)); fin = {x["condition"]: x for x in json.load(open(vp))}
-    for c, cl in CLASS_FIX.items():
-        if c in fin: assert fin[c]["class"] == "psychiatric_other", (c, fin[c]["class"]); fin[c]["class"] = cl
+    fixes = json.load(open(vocab_fixes.TABLE)); vocab_fixes.apply(fin, table, fixes); vocab_fixes.check(fin, fixes["classes_retired"])
     json.dump(sorted(fin.values(), key=lambda x: x["condition"]), open(out / "vocabulary.json", "w"), ensure_ascii=False, indent=0)
     meta = {p for p, v in json.load(open(sys.argv[5])).items() if v["meta"]} if len(sys.argv) > 5 else set(); dropped = set()
     fin.setdefault("unspecified condition", {"condition": "unspecified condition", "class": "not_a_condition", "parent": None})

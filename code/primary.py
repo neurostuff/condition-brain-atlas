@@ -20,7 +20,8 @@ assign() -> (primary conditions, additional conditions, tier):
 import re
 
 GENERIC = {"psychotic disorder", "depressive disorder", "mood disorder", "anxiety disorder", "substance use disorder", "behavioral addiction",
-           "specific learning disorder", "eating disorder", "personality disorder", "disruptive behavior disorder"}
+           "specific learning disorder", "eating disorder", "personality disorder", "disruptive behavior disorder",
+           "obsessive-compulsive or related disorder"}
 PEOPLE = r"(patients?|subjects?|participants?|cases|individuals|children|adolescents|adults|men|women|members|youths?|probands?|persons?|people)"
 PARTIAL = re.compile(rf"\b(in|among|for|of)\s+(\S+\s+){{0,4}}?{PEOPLE}\b|\d\s*%|\bn\s*=\s*\d|\b\d+\s+{PEOPLE}\b|^(comorbid|co-morbid|past|previous|prior|former|lifetime|history of|some|possible)\b", re.I)
 ALIAS = {"schizophrenia": ["sz", "scz", "sch", "schiz", "sczs", "szs", "sp", "fes", "schizophrenic", "schizophrenics"], "major depressive disorder": ["mdd", "depression", "depressed", "depressive", "md", "mdds", "trd", "lld", "rmdd"],
